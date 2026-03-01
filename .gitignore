@@ -8,3 +8,4 @@ last_project.json
 config.json
 .venv/
 .venv-proxy/
+*.knxproj

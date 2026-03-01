@@ -165,6 +165,29 @@
                   class="flex-1 bg-gray-100 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-200 transition-colors">Abbrechen</button>
         </div>
 
+        <!-- Gateway Description -->
+        <hr class="my-4 border-gray-200">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-sm font-semibold text-gray-700">Gateway-Info</h4>
+          <button @click="loadGatewayDescription()"
+                  :disabled="gatewayDescLoading || !gatewayIP"
+                  class="text-xs px-2.5 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                  x-text="gatewayDescLoading ? 'Abruf…' : 'Abrufen'"></button>
+        </div>
+        <p x-show="gatewayDescError" x-text="gatewayDescError" class="text-xs text-red-500 mb-1"></p>
+        <div x-show="gatewayDescription" class="text-xs font-mono space-y-0.5 bg-gray-50 rounded p-2">
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">Name</span><span class="text-gray-700" x-text="gatewayDescription?.device?.friendly_name || '—'"></span></div>
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">Ind. Adresse</span><span class="text-gray-700" x-text="gatewayDescription?.device?.individual_address"></span></div>
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">KNX-Medium</span><span class="text-gray-700" x-text="gatewayDescription?.device?.knx_medium"></span></div>
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">Seriennummer</span><span class="text-gray-700" x-text="gatewayDescription?.device?.serial_number"></span></div>
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">MAC</span><span class="text-gray-700" x-text="gatewayDescription?.device?.mac_address"></span></div>
+          <div class="flex gap-2"><span class="text-gray-400 w-24 flex-shrink-0">Prog.-Modus</span>
+            <span :class="gatewayDescription?.device?.programming_mode ? 'text-orange-600 font-bold' : 'text-gray-700'"
+                  x-text="gatewayDescription?.device?.programming_mode ? 'AKTIV' : 'Aus'"></span></div>
+          <div class="flex gap-2 flex-wrap"><span class="text-gray-400 w-24 flex-shrink-0">Services</span>
+            <span class="text-gray-700" x-text="(gatewayDescription?.services || []).map(s => s.name + ' v' + s.version).join(', ')"></span></div>
+        </div>
+
         <!-- LLM config -->
         <hr class="my-4 border-gray-200">
         <h4 class="text-sm font-semibold text-gray-700 mb-3">KI-Analyse (OpenRouter)</h4>
@@ -927,6 +950,7 @@
             <thead class="sticky top-0 bg-gray-50 text-gray-500 uppercase text-xs z-10">
               <tr>
                 <th class="px-3 py-3 text-left whitespace-nowrap">Zeit</th>
+                <th class="px-2 py-3 text-left w-6" title="APCI-Typ: W=Write, R=Read, A=Response">T</th>
                 <th class="px-3 py-3 text-left">PA</th>
                 <th class="px-3 py-3 text-left">Gerät</th>
                 <th class="px-3 py-3 text-left">GA</th>
@@ -938,6 +962,11 @@
               <template x-for="(entry, i) in filteredLiveLog" :key="i">
                 <tr class="border-t hover:bg-gray-50 transition-colors">
                   <td class="px-3 py-2 text-gray-400 whitespace-nowrap text-xs" x-text="entry.ts.split(' ')[1]"></td>
+                  <td class="px-2 py-2 text-xs">
+                    <span x-show="entry.apci === 'GroupValueWrite'" class="inline-block px-1 rounded text-white font-bold text-[10px] bg-blue-500" title="GroupValueWrite">W</span>
+                    <span x-show="entry.apci === 'GroupValueRead'" class="inline-block px-1 rounded text-white font-bold text-[10px] bg-orange-400" title="GroupValueRead">R</span>
+                    <span x-show="entry.apci === 'GroupValueResponse'" class="inline-block px-1 rounded text-white font-bold text-[10px] bg-green-500" title="GroupValueResponse">A</span>
+                  </td>
                   <td class="px-3 py-2 text-gray-600 text-xs" x-text="entry.src"></td>
                   <td class="px-3 py-2 text-gray-600 text-xs min-w-[180px] max-w-[220px] truncate" x-text="entry.device" :title="entry.device"></td>
                   <td class="px-3 py-2 text-blue-600 cursor-pointer hover:underline text-xs whitespace-nowrap"
@@ -945,16 +974,174 @@
                       @click="gaSearch = entry.ga; activeTab = 'group_addresses'"></td>
                   <td class="px-3 py-2 text-gray-700 text-xs min-w-[220px] max-w-[280px] truncate" x-text="entry.ga_name" :title="entry.ga_name"></td>
                   <td class="px-3 py-2 text-xs" :class="valueClass(entry.value)" x-text="entry.value"
-                      :title="[entry.dpt ? 'DPT: ' + entry.dpt : '', entry.raw && entry.raw !== entry.value ? 'Raw: ' + entry.raw : ''].filter(Boolean).join(' | ') || ''"></td>
+                      :title="[entry.dpt ? 'DPT: ' + entry.dpt : (entry.dpt_estimate ? '~DPT: ' + entry.dpt_estimate : ''), entry.raw && entry.raw !== entry.value ? 'Raw: ' + entry.raw : ''].filter(Boolean).join(' | ') || ''"></td>
                 </tr>
               </template>
               <tr x-show="filteredLiveLog.length === 0">
-                <td colspan="6" class="text-center text-gray-400 py-12 font-sans">
+                <td colspan="7" class="text-center text-gray-400 py-12 font-sans">
                   <span x-text="wsStatus === 'connected' ? 'Warte auf Telegramme…' : 'Kein Gateway verbunden. ⚙-Button zum Konfigurieren.'"></span>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- BUS-SCAN TAB -->
+    <div x-show="activeTab === 'bus_scan'">
+
+      <!-- PA-Scan -->
+      <div class="bg-white rounded-xl shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-1">Physische Adressen (PA-Scan)</h2>
+        <p class="text-xs text-gray-400 mb-4">Testet physische KNX-Adressen per Management-Verbindung. Nur mit lokaler Gateway-Verbindung. Bereich ohne Angabe = alle Bereiche/Linien (1–15).</p>
+        <div class="flex flex-wrap gap-3 items-end mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Bereich (Area 1–15)</label>
+            <input x-model="scanArea" type="number" min="1" max="15" placeholder="alle"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Linie (Line 1–15)</label>
+            <input x-model="scanLine" type="number" min="1" max="15" placeholder="alle"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Timeout (ms)</label>
+            <input x-model="scanTimeoutMs" type="number" min="500" max="5000" step="100"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <button @click="startPaScan()" :disabled="paScanning || !wsStatus.includes('connected')"
+                  class="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+            <span x-text="paScanning ? 'Scannt…' : '▶ Scan starten'"></span>
+          </button>
+          <button x-show="paScanning" @click="cancelPaScan()"
+                  class="bg-gray-200 text-gray-700 text-sm px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors">✕ Abbrechen</button>
+        </div>
+
+        <!-- Fortschritt -->
+        <div x-show="paScanning || paScanDone" class="mb-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm text-gray-600"
+                  x-text="paScanDone ? (paScanCancelled ? 'Abgebrochen nach' : 'Abgeschlossen:') + ' ' + paScanProgress + '/' + paScanTotal + ' geprüft, ' + paScanFound.length + ' gefunden'
+                                     : 'Prüfe ' + paScanProgress + '/' + paScanTotal + ' — ' + paScanFound.length + ' gefunden'">
+            </span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-2">
+            <div class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                 :style="'width:' + (paScanTotal > 0 ? Math.round(paScanProgress/paScanTotal*100) : 0) + '%'"></div>
+          </div>
+        </div>
+
+        <!-- Ergebnisse -->
+        <div x-show="paScanFound.length > 0">
+          <h3 class="text-sm font-semibold text-gray-600 mb-2" x-text="'Gefundene Geräte (' + paScanFound.length + ')'"></h3>
+          <div class="overflow-auto max-h-80">
+            <table class="w-full text-sm font-mono">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                  <th class="px-3 py-2 text-left">Physische Adresse</th>
+                  <th class="px-3 py-2 text-left">Name (Bus-Monitor)</th>
+                  <th class="px-3 py-2 text-left w-32">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="addr in paScanFound" :key="addr">
+                  <tr class="border-t hover:bg-gray-50">
+                    <td class="px-3 py-2 text-blue-700" x-text="addr"></td>
+                    <td class="px-3 py-2 text-gray-600 text-xs"
+                        x-text="(annotations.devices[addr]?.name) || busDevices.find(d=>d.individual_address===addr)?.name || '—'"></td>
+                    <td class="px-3 py-2">
+                      <button @click="loadDeviceProperties(addr)"
+                              class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-2 py-1 hover:bg-indigo-100 transition-colors">
+                        Eigenschaften
+                      </button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div x-show="paScanDone && paScanFound.length === 0" class="text-gray-400 text-sm mt-2">Keine Geräte gefunden.</div>
+      </div>
+
+      <!-- GA-Scan -->
+      <div class="bg-white rounded-xl shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-1">Gruppenadressen (GA-Scan)</h2>
+        <p class="text-xs text-gray-400 mb-4">Sendet GroupValueRead an alle GAs im angegebenen Bereich. Antworten erscheinen im Bus-Monitor als Response (A). Format: main/middle/sub (0–31 / 0–7 / 0–255).</p>
+        <div class="flex flex-wrap gap-3 items-end mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Von GA</label>
+            <input x-model="gaScanStart" type="text" placeholder="0/0/1"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Bis GA</label>
+            <input x-model="gaScanEnd" type="text" placeholder="5/7/255"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Delay (ms)</label>
+            <input x-model="gaScanDelayMs" type="number" min="50" max="1000" step="50"
+                   class="border border-gray-300 rounded px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <button @click="startGaScan()" :disabled="gaScanning || !wsStatus.includes('connected')"
+                  class="bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-40 transition-colors">
+            <span x-text="gaScanning ? 'Scannt…' : '▶ Scan starten'"></span>
+          </button>
+          <button x-show="gaScanning" @click="cancelGaScan()"
+                  class="bg-gray-200 text-gray-700 text-sm px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors">✕ Abbrechen</button>
+        </div>
+
+        <div x-show="gaScanning || gaScanDone" class="mb-2">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm text-gray-600"
+                  x-text="gaScanDone ? (gaScanCancelled ? 'Abgebrochen nach' : 'Abgeschlossen:') + ' ' + gaScanProgress + '/' + gaScanTotal + ' gesendet, ' + gaScanResponded + ' Antworten'
+                                     : 'Gesendet: ' + gaScanProgress + '/' + gaScanTotal + ' — ' + gaScanResponded + ' Antworten'">
+            </span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-2">
+            <div class="bg-green-500 h-2 rounded-full transition-all duration-300"
+                 :style="'width:' + (gaScanTotal > 0 ? Math.round(gaScanProgress/gaScanTotal*100) : 0) + '%'"></div>
+          </div>
+        </div>
+        <p x-show="gaScanDone" class="text-xs text-gray-400 mt-1">Antworten erscheinen im Bus-Monitor-Tab (Typ A = grün).</p>
+      </div>
+
+      <!-- Device Properties Modal -->
+      <div x-show="devicePropsModal" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" @keydown.escape.window="devicePropsModal=false">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-700" x-text="'Geräteeigenschaften: ' + devicePropsAddr"></h3>
+            <button @click="devicePropsModal=false" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          </div>
+          <div x-show="devicePropsLoading" class="text-gray-400 text-sm py-4 text-center">Lese Eigenschaften…</div>
+          <div x-show="devicePropsError" class="text-red-500 text-sm py-2" x-text="devicePropsError"></div>
+          <div x-show="devicePropsData && !devicePropsLoading">
+            <table class="w-full text-sm font-mono" x-show="devicePropsData">
+              <tbody>
+                <tr class="border-t">
+                  <td class="py-1.5 pr-4 text-gray-500 text-xs w-40">Physische Adresse</td>
+                  <td class="py-1.5 text-gray-800" x-text="devicePropsData?.address"></td>
+                </tr>
+                <tr class="border-t" x-show="devicePropsData?.descriptor">
+                  <td class="py-1.5 pr-4 text-gray-500 text-xs">Gerätedeskriptor</td>
+                  <td class="py-1.5 text-gray-800" x-text="devicePropsData?.descriptor"></td>
+                </tr>
+                <tr class="border-t" x-show="devicePropsData?.manufacturer_id">
+                  <td class="py-1.5 pr-4 text-gray-500 text-xs">Hersteller-ID</td>
+                  <td class="py-1.5 text-gray-800" x-text="devicePropsData?.manufacturer_id + ' (0x' + devicePropsData?.manufacturer_id?.toString(16).toUpperCase().padStart(4,'0') + ')'"></td>
+                </tr>
+                <template x-for="[name, val] in Object.entries(devicePropsData?.properties ?? {})" :key="name">
+                  <tr class="border-t" x-show="val !== null">
+                    <td class="py-1.5 pr-4 text-gray-500 text-xs" x-text="name.replace('PID_','')"></td>
+                    <td class="py-1.5 text-gray-800 text-xs" x-text="val"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1028,6 +1215,7 @@ function app() {
       { id: 'com_objects', label: 'Kommunikationsobjekte' },
       { id: 'functions', label: 'Funktionen' },
       { id: 'bus_monitor', label: 'Bus-Monitor' },
+      { id: 'bus_scan', label: 'Bus-Scan' },
       { id: 'ki_analyse', label: 'KI-Analyse' },
     ],
     deviceSearch: '',
@@ -1083,6 +1271,34 @@ function app() {
     wgSetupData: { server_ip: '10.100.0.1', peer_ip: '10.100.0.2', listen_port: 51820, ets_port: 13671, knx_ip: '', knx_port: 3671, server_public_ip: '' },
     wgSetupResult: '',
     wgSetupError: '',
+
+    // Bus-Scan state
+    paScanning: false,
+    paScanProgress: 0,
+    paScanTotal: 0,
+    paScanFound: [],
+    paScanDone: false,
+    paScanCancelled: false,
+    scanArea: '',
+    scanLine: '',
+    scanTimeoutMs: 1500,
+    gaScanning: false,
+    gaScanProgress: 0,
+    gaScanTotal: 0,
+    gaScanDone: false,
+    gaScanCancelled: false,
+    gaScanResponded: 0,
+    gaScanStart: '0/0/1',
+    gaScanEnd: '5/7/255',
+    gaScanDelayMs: 100,
+    devicePropsModal: false,
+    devicePropsAddr: '',
+    devicePropsData: null,
+    devicePropsLoading: false,
+    devicePropsError: '',
+    gatewayDescription: null,
+    gatewayDescLoading: false,
+    gatewayDescError: '',
 
     async init() {
       try {
@@ -1326,6 +1542,29 @@ function app() {
           this.wireguardLatencyMs = msg.latency_ms;
           this.wireguardPeerConnected = msg.peer_connected;
           this.wireguardAllowedActions = msg.allowed_actions;
+        } else if (msg.type === 'scan_pa_found') {
+          this.paScanFound = [...this.paScanFound, msg.address];
+        } else if (msg.type === 'scan_pa_progress') {
+          this.paScanProgress = msg.done;
+          this.paScanTotal = msg.total;
+        } else if (msg.type === 'scan_pa_complete') {
+          this.paScanning = false;
+          this.paScanProgress = msg.total;
+          this.paScanTotal = msg.total;
+          this.paScanDone = true;
+          this.paScanCancelled = msg.cancelled || false;
+          if (msg.found && msg.found.length > 0) this.paScanFound = msg.found;
+        } else if (msg.type === 'scan_ga_progress') {
+          this.gaScanProgress = msg.done;
+          this.gaScanTotal = msg.total;
+        } else if (msg.type === 'scan_ga_complete') {
+          this.gaScanning = false;
+          this.gaScanProgress = msg.total;
+          this.gaScanTotal = msg.total;
+          this.gaScanDone = true;
+          this.gaScanCancelled = msg.cancelled || false;
+        } else if (msg.type === 'telegram' && this.gaScanning) {
+          if (msg.apci === 'GroupValueResponse') this.gaScanResponded++;
         }
       };
       this.ws.onclose = () => {
@@ -1573,9 +1812,76 @@ function app() {
       return this.tabs.filter(tab => {
         if (tab.id === 'functions') return this.project && Object.keys(this.project.functions ?? {}).length > 0;
         if (tab.id === 'bus_monitor') return !this.publicMode;
+        if (tab.id === 'bus_scan') return !this.publicMode;
         if (tab.id === 'ki_analyse') return !this.publicMode && this.llmConfigured && !!this.project;
         return true;
       });
+    },
+
+    async loadGatewayDescription() {
+      this.gatewayDescLoading = true;
+      this.gatewayDescError = '';
+      this.gatewayDescription = null;
+      try {
+        const res = await fetch('/api/gateway/description');
+        if (res.ok) this.gatewayDescription = await res.json();
+        else { const e = await res.json(); this.gatewayDescError = e.detail || 'Fehler'; }
+      } catch (e) { this.gatewayDescError = String(e); }
+      this.gatewayDescLoading = false;
+    },
+
+    async startPaScan() {
+      this.paScanFound = [];
+      this.paScanProgress = 0;
+      this.paScanTotal = 0;
+      this.paScanDone = false;
+      this.paScanCancelled = false;
+      this.paScanning = true;
+      const body = { timeout_ms: Number(this.scanTimeoutMs) };
+      if (this.scanArea !== '') body.area = Number(this.scanArea);
+      if (this.scanLine !== '') body.line = Number(this.scanLine);
+      try {
+        const res = await fetch('/api/bus/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { const e = await res.json(); this.paScanning = false; alert('PA-Scan Fehler: ' + (e.detail || res.status)); }
+        else { const d = await res.json(); this.paScanTotal = d.count; }
+      } catch (e) { this.paScanning = false; alert('PA-Scan Fehler: ' + e); }
+    },
+
+    async cancelPaScan() {
+      await fetch('/api/bus/scan/cancel', { method: 'POST' });
+    },
+
+    async startGaScan() {
+      this.gaScanProgress = 0;
+      this.gaScanTotal = 0;
+      this.gaScanDone = false;
+      this.gaScanCancelled = false;
+      this.gaScanResponded = 0;
+      this.gaScanning = true;
+      try {
+        const res = await fetch('/api/ga/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start: this.gaScanStart, end: this.gaScanEnd, delay_ms: Number(this.gaScanDelayMs) }) });
+        if (!res.ok) { const e = await res.json(); this.gaScanning = false; alert('GA-Scan Fehler: ' + (e.detail || res.status)); }
+        else { const d = await res.json(); this.gaScanTotal = d.count; }
+      } catch (e) { this.gaScanning = false; alert('GA-Scan Fehler: ' + e); }
+    },
+
+    async cancelGaScan() {
+      await fetch('/api/ga/scan/cancel', { method: 'POST' });
+    },
+
+    async loadDeviceProperties(addr) {
+      this.devicePropsAddr = addr;
+      this.devicePropsData = null;
+      this.devicePropsLoading = true;
+      this.devicePropsError = '';
+      this.devicePropsModal = true;
+      try {
+        const res = await fetch('/api/device/' + encodeURIComponent(addr) + '/properties');
+        if (res.ok) this.devicePropsData = await res.json();
+        else { const e = await res.json(); this.devicePropsError = e.detail || 'Fehler'; }
+      } catch (e) { this.devicePropsError = String(e); }
+      this.devicePropsLoading = false;
     },
 
     get filteredLiveLog() {

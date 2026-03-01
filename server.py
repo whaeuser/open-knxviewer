@@ -4,6 +4,8 @@ import io
 import json
 import logging
 import os
+import socket
+import struct
 import tempfile
 import uuid
 from collections import deque
@@ -49,6 +51,11 @@ state: dict = {
     "remote_gateway_token": "",
     "remote_gateway_ws": None,
     "remote_gateway_connected": False,
+    # Scan state
+    "ga_scan_running": False,
+    "ga_scan_cancel": False,
+    "pa_scan_running": False,
+    "pa_scan_cancel": False,
     # WireGuard
     "wireguard_enabled": False,
     "wireguard_peer_connected": False,
@@ -280,6 +287,9 @@ async def _process_telegram(telegram):
                 ga_name = gad.get("name", "")
                 break
 
+    # APCI type (GroupValueWrite / GroupValueRead / GroupValueResponse)
+    apci_type = type(telegram.payload).__name__
+
     # Raw value (payload before DPT decoding)
     if hasattr(telegram.payload, "value") and telegram.payload.value is not None:
         raw_value = str(telegram.payload.value)
@@ -288,6 +298,7 @@ async def _process_telegram(telegram):
 
     # Use xknx's decoded value (DPT-aware) if available, otherwise fall back to raw
     dpt = ""
+    dpt_estimate = ""
     if telegram.decoded_data is not None:
         decoded = telegram.decoded_data.value
         transcoder = telegram.decoded_data.transcoder
@@ -305,6 +316,14 @@ async def _process_telegram(telegram):
             value = f"{decoded}{' ' + unit if unit else ''}"
     else:
         value = raw_value
+        # DPT estimate from payload size when no DPT is known
+        payload_val = getattr(telegram.payload, "value", None)
+        if payload_val is not None:
+            if isinstance(payload_val, DPTBinary):
+                dpt_estimate = "1.x"
+            elif isinstance(payload_val, DPTArray):
+                n = len(payload_val.value)
+                dpt_estimate = {1: "5.x/17.x/20.x", 2: "9.x/7.x/8.x", 3: "10.x/11.x", 4: "14.x/12.x/13.x"}.get(n, f"?({n}B)")
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
@@ -318,6 +337,8 @@ async def _process_telegram(telegram):
         "value": value,
         "raw": raw_value,
         "dpt": dpt,
+        "dpt_estimate": dpt_estimate,
+        "apci": apci_type,
     }
 
     bus_logger.info(f"{ts} | {src} | {device_name} | {ga} | {ga_name} | {value}")
@@ -481,6 +502,102 @@ def get_gateway():
         "remote_gateway_token": cfg.get("remote_gateway_token", ""),
         "remote_gateway_connected": state.get("remote_gateway_connected", False),
     }
+
+
+@app.get("/api/gateway/description")
+async def gateway_description():
+    """Fetch KNXnet/IP Description from gateway via UDP (no connection required)."""
+    ip = state.get("gateway_ip", "")
+    port = state.get("gateway_port", 3671)
+    if not ip:
+        raise HTTPException(status_code=503, detail="Gateway-IP nicht konfiguriert")
+    try:
+        result = await asyncio.wait_for(_fetch_gateway_description(ip, port), timeout=5.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Gateway antwortet nicht (Timeout)") from None
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return result
+
+
+async def _fetch_gateway_description(ip: str, port: int) -> dict:
+    """Send KNXnet/IP DESCRIPTION_REQUEST (0x0203) and parse DESCRIPTION_RESPONSE (0x0204)."""
+    # KNXnet/IP header: 06 10 0203 000E + HPAI (08 01 00000000 0000)
+    request = bytes([0x06, 0x10, 0x02, 0x03, 0x00, 0x0E,
+                     0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future = loop.create_future()
+
+    class _Proto(asyncio.DatagramProtocol):
+        def datagram_received(self, data, addr):
+            if not future.done():
+                future.set_result(data)
+        def error_received(self, exc):
+            if not future.done():
+                future.set_exception(exc)
+        def connection_lost(self, exc):
+            if not future.done() and exc:
+                future.set_exception(exc)
+
+    transport, _ = await loop.create_datagram_endpoint(
+        _Proto, remote_addr=(ip, port), family=socket.AF_INET
+    )
+    try:
+        transport.sendto(request)
+        data = await future
+    finally:
+        transport.close()
+
+    return _parse_knxip_description(data)
+
+
+def _parse_knxip_description(data: bytes) -> dict:
+    if len(data) < 6:
+        return {"error": "Antwort zu kurz"}
+    _, _, service_id, _ = struct.unpack_from("!BBHH", data)
+    if service_id != 0x0204:
+        return {"error": f"Unerwarteter Service-Typ: {service_id:#06x}"}
+    result: dict = {}
+    pos = 6
+    while pos < len(data):
+        if pos + 2 > len(data):
+            break
+        dib_len = data[pos]
+        dib_type = data[pos + 1]
+        if dib_len == 0:
+            break
+        block = data[pos:pos + dib_len]
+        if dib_type == 0x01 and dib_len >= 54:  # DIB_DEVICE_INFO
+            knx_medium = block[2]
+            dev_status = block[3]
+            ia_high, ia_low = block[4], block[5]
+            area = (ia_high >> 4) & 0xF
+            line = ia_high & 0xF
+            device_num = ia_low
+            serial = block[8:14].hex(":").upper()
+            mac = ":".join(f"{b:02X}" for b in block[20:26])
+            friendly_name = block[26:56].rstrip(b"\x00").decode("latin-1", errors="replace").strip()
+            medium_map = {0x01: "TP", 0x02: "PL110", 0x04: "RF", 0x20: "IP"}
+            result["device"] = {
+                "friendly_name": friendly_name,
+                "individual_address": f"{area}.{line}.{device_num}",
+                "knx_medium": medium_map.get(knx_medium, f"0x{knx_medium:02X}"),
+                "serial_number": serial,
+                "mac_address": mac,
+                "programming_mode": bool(dev_status & 0x01),
+            }
+        elif dib_type == 0x02:  # DIB_SUPP_SVC_FAMILIES
+            svc_map = {0x02: "Core", 0x03: "Device Management", 0x04: "Tunnelling",
+                       0x05: "Routing", 0x06: "Remote Logging", 0x08: "Remote Configuration",
+                       0x0A: "KNXnet/IP Security"}
+            services = []
+            for i in range(2, dib_len - 1, 2):
+                svc_id = block[i]
+                svc_ver = block[i + 1]
+                services.append({"id": svc_id, "name": svc_map.get(svc_id, f"0x{svc_id:02X}"), "version": svc_ver})
+            result["services"] = services
+        pos += dib_len
+    return result
 
 
 @app.post("/api/gateway")
@@ -783,6 +900,215 @@ async def ga_read_all():
 
     asyncio.create_task(_send_all())
     return {"ok": True, "count": len(gas)}
+
+
+# ── Bus Scan ───────────────────────────────────────────────────────────────────
+
+@app.post("/api/ga/scan")
+async def ga_scan(data: dict):
+    """Scan a range of group addresses by sending GroupValueRead to each."""
+    if not state["connected"]:
+        raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
+    if state.get("ga_scan_running"):
+        raise HTTPException(status_code=409, detail="GA-Scan läuft bereits")
+
+    start = data.get("start", "0/0/1")
+    end = data.get("end", "5/7/255")
+    delay_ms = max(50, int(data.get("delay_ms", 100)))
+
+    def _parse_ga(s: str):
+        parts = s.split("/")
+        return int(parts[0]), int(parts[1]), int(parts[2])
+
+    try:
+        sm, sk, ss = _parse_ga(start)
+        em, ek, es = _parse_ga(end)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Ungültiges GA-Format (erwartet: main/middle/sub)") from None
+
+    gas = []
+    for m in range(sm, em + 1):
+        for k in range(0, 8):
+            if m == sm and k < sk:
+                continue
+            if m == em and k > ek:
+                break
+            for s in range(0, 256):
+                if m == sm and k == sk and s < ss:
+                    continue
+                if m == em and k == ek and s > es:
+                    break
+                gas.append(f"{m}/{k}/{s}")
+
+    if len(gas) > 32768:
+        raise HTTPException(status_code=422, detail=f"Bereich zu groß ({len(gas)} GAs, max 32768)")
+
+    state["ga_scan_running"] = True
+    state["ga_scan_cancel"] = False
+
+    async def _run():
+        try:
+            for i, ga_str in enumerate(gas):
+                if state.get("ga_scan_cancel"):
+                    break
+                if not state["connected"]:
+                    break
+                tg = Telegram(destination_address=GroupAddress(ga_str), payload=GroupValueRead())
+                await state["xknx"].telegrams.put(tg)
+                if i % 20 == 0:
+                    await broadcast({"type": "scan_ga_progress", "done": i, "total": len(gas)})
+                await asyncio.sleep(delay_ms / 1000)
+        finally:
+            state["ga_scan_running"] = False
+            await broadcast({"type": "scan_ga_complete", "total": len(gas),
+                             "cancelled": state.get("ga_scan_cancel", False)})
+            state["ga_scan_cancel"] = False
+
+    asyncio.create_task(_run())
+    return {"ok": True, "count": len(gas)}
+
+
+@app.post("/api/ga/scan/cancel")
+async def ga_scan_cancel():
+    state["ga_scan_cancel"] = True
+    return {"ok": True}
+
+
+@app.post("/api/bus/scan")
+async def bus_scan(data: dict):
+    """Scan physical addresses on the bus using xknx management P2P connections."""
+    if not state["connected"]:
+        raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
+    if state.get("connection_type") == "remote_gateway":
+        raise HTTPException(status_code=503, detail="PA-Scan nur mit lokaler Gateway-Verbindung")
+    if state.get("pa_scan_running"):
+        raise HTTPException(status_code=409, detail="PA-Scan läuft bereits")
+
+    area = data.get("area")   # None = alle Bereiche 1-15
+    line = data.get("line")   # None = alle Linien 1-15
+    timeout_ms = max(500, min(5000, int(data.get("timeout_ms", 1500))))
+
+    areas = [area] if area is not None else list(range(1, 16))
+    addresses = []
+    for a in areas:
+        lines = [line] if line is not None else list(range(1, 16))
+        for li in lines:
+            for d in range(1, 256):
+                addresses.append(f"{a}.{li}.{d}")
+
+    state["pa_scan_running"] = True
+    state["pa_scan_cancel"] = False
+
+    async def _check(addr: str) -> bool:
+        from xknx.management.procedures import nm_individual_address_check
+        try:
+            return await asyncio.wait_for(
+                nm_individual_address_check(state["xknx"], IndividualAddress(addr)),
+                timeout=timeout_ms / 1000
+            )
+        except (asyncio.TimeoutError, Exception):
+            return False
+
+    async def _run():
+        found = []
+        try:
+            for i, addr in enumerate(addresses):
+                if state.get("pa_scan_cancel") or not state["connected"]:
+                    break
+                exists = await _check(addr)
+                if exists:
+                    found.append(addr)
+                    await broadcast({"type": "scan_pa_found", "address": addr})
+                if i % 5 == 0:
+                    await broadcast({"type": "scan_pa_progress", "done": i, "total": len(addresses)})
+        finally:
+            state["pa_scan_running"] = False
+            await broadcast({"type": "scan_pa_complete", "found": found,
+                             "total": len(addresses),
+                             "cancelled": state.get("pa_scan_cancel", False)})
+            state["pa_scan_cancel"] = False
+
+    asyncio.create_task(_run())
+    return {"ok": True, "count": len(addresses)}
+
+
+@app.post("/api/bus/scan/cancel")
+async def bus_scan_cancel():
+    state["pa_scan_cancel"] = True
+    return {"ok": True}
+
+
+@app.get("/api/device/{addr}/properties")
+async def device_properties(addr: str):
+    """Read device properties via xknx management P2P connection."""
+    if not state["connected"]:
+        raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
+    if state.get("connection_type") == "remote_gateway":
+        raise HTTPException(status_code=503, detail="Device-Properties nur mit lokaler Gateway-Verbindung")
+
+    from xknx.telegram import apci as xknx_apci
+
+    # KNX standard Object 0 (Device Object) property IDs
+    PROPERTIES = {
+        11: "PID_OBJECT_TYPE",
+        13: "PID_OBJECT_NAME",
+        12: "PID_MANUFACTURER_ID",
+        14: "PID_LOAD_STATE",
+        56: "PID_SERIAL_NUMBER",
+        57: "PID_FIRMWARE_REVISION",
+        78: "PID_ORDER_INFO",
+    }
+
+    try:
+        ia = IndividualAddress(addr)
+    except Exception:
+        raise HTTPException(status_code=422, detail=f"Ungültige physische Adresse: {addr}") from None
+
+    try:
+        async with state["xknx"].management.connection(ia) as conn:
+            # Read device descriptor (type info)
+            try:
+                desc_resp = await asyncio.wait_for(
+                    conn.request(
+                        payload=xknx_apci.DeviceDescriptorRead(descriptor=0),
+                        expected=xknx_apci.DeviceDescriptorResponse,
+                    ),
+                    timeout=4.0,
+                )
+                descriptor = desc_resp.payload.value if hasattr(desc_resp.payload, "value") else None
+            except Exception:
+                descriptor = None
+
+            # Read properties
+            props = {}
+            for pid, name in PROPERTIES.items():
+                try:
+                    resp = await asyncio.wait_for(
+                        conn.request(
+                            payload=xknx_apci.PropertyValueRead(
+                                object_index=0, property_id=pid, count=1, start_index=1
+                            ),
+                            expected=xknx_apci.PropertyValueResponse,
+                        ),
+                        timeout=3.0,
+                    )
+                    raw = getattr(resp.payload, "data", b"")
+                    props[name] = raw.hex().upper() if raw else None
+                except Exception:
+                    props[name] = None
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Verbindung zu {addr} fehlgeschlagen: {exc}") from exc
+
+    # Decode manufacturer ID (2 bytes big-endian, KNXA manufacturer list)
+    mfr_raw = props.get("PID_MANUFACTURER_ID")
+    mfr_id = int(mfr_raw, 16) if mfr_raw and len(mfr_raw) == 4 else None
+
+    return {
+        "address": addr,
+        "descriptor": f"0x{descriptor:04X}" if descriptor is not None else None,
+        "manufacturer_id": mfr_id,
+        "properties": props,
+    }
 
 
 # ── WireGuard API ─────────────────────────────────────────────────────────────
