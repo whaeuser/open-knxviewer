@@ -3,6 +3,9 @@
     "1.0.14": {
       "name": "Testgerät",
       "description": "Im Keller"
+    },
+    "1.0.13": {
+      "description": "Hallo"
     }
   },
   "group_addresses": {

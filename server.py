@@ -1040,6 +1040,24 @@ async def bus_scan_cancel():
     return {"ok": True}
 
 
+@app.get("/api/bus/programming-mode")
+async def bus_programming_mode(timeout: float = 3.0):
+    """Detect all devices currently in programming mode via IndividualAddressRead broadcast."""
+    if not state["connected"]:
+        raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
+    if state.get("connection_type") == "remote_gateway":
+        raise HTTPException(status_code=503, detail="Nur mit lokaler Gateway-Verbindung")
+    from xknx.management.procedures import nm_individual_address_read
+    try:
+        addresses = await asyncio.wait_for(
+            nm_individual_address_read(state["xknx"], timeout=timeout),
+            timeout=timeout + 1.0,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"addresses": [str(a) for a in addresses]}
+
+
 @app.get("/api/device/{addr}/properties")
 async def device_properties(addr: str):
     """Read device properties via xknx management P2P connection."""
