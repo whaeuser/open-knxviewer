@@ -33,6 +33,13 @@ def reset_server_state():
             "remote_gateway_token": "",
             "remote_gateway_ws": None,
             "remote_gateway_connected": False,
+            # WireGuard
+            "wireguard_enabled": False,
+            "wireguard_peer_connected": False,
+            "wireguard_latency_ms": None,
+            "wireguard_allowed_actions": ["monitor"],
+            "wireguard_latency_task": None,
+            "wireguard_ets_port_active": False,
         }
     )
     yield

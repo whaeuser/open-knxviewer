@@ -91,6 +91,13 @@
           <span class="text-gray-600" x-text="wsStatus === 'connected' ? (connectionType === 'remote_gateway' ? 'Remote-Gateway' : gatewayIP) : 'Kein Gateway'"></span>
           <button @click="showGatewayConfig = true" class="text-gray-400 hover:text-gray-700 ml-0.5" title="Gateway konfigurieren">⚙</button>
         </span>
+        <!-- WireGuard latency indicator -->
+        <span x-show="!publicMode && wireguardEnabled"
+              class="flex items-center gap-1 text-xs border-l pl-3 font-mono"
+              :title="'WireGuard Tunnel — Latenz: ' + (wireguardLatencyMs !== null ? wireguardLatencyMs + ' ms' : 'keine Verbindung')">
+          <span class="w-2 h-2 rounded-full" :class="wgLatencyColor()"></span>
+          <span x-text="wireguardLatencyMs !== null ? wireguardLatencyMs + ' ms' : 'WG…'"></span>
+        </span>
       </div>
     </div>
 
@@ -176,6 +183,91 @@
                   class="w-full bg-gray-700 text-white text-sm font-semibold py-2 rounded-lg hover:bg-gray-800 transition-colors">
             KI-Konfiguration speichern
           </button>
+        </div>
+
+        <!-- WireGuard Tunnel -->
+        <hr class="my-4 border-gray-200">
+        <h4 class="text-sm font-semibold text-gray-700 mb-3">WireGuard Tunnel (ETS-Zugang)</h4>
+        <div class="space-y-3">
+          <!-- Status-Zeile -->
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" :class="wgLatencyColor()"></span>
+            <span class="text-gray-600" x-text="wireguardEnabled ? (wireguardPeerConnected ? 'Pi verbunden' : 'Tunnel aktiv, Pi nicht erreichbar') : 'Deaktiviert'"></span>
+            <span x-show="wireguardLatencyMs !== null" class="font-mono text-gray-500" x-text="wireguardLatencyMs + ' ms'"></span>
+          </div>
+          <!-- Erlaubte Aktionen als Badges -->
+          <div x-show="wireguardEnabled" class="flex flex-wrap gap-1">
+            <template x-for="a in ['monitor','ga_rw','ets_params','ets_program']" :key="a">
+              <span class="text-xs px-1.5 py-0.5 rounded"
+                    :class="wireguardAllowedActions.includes(a) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
+                    x-text="a"></span>
+            </template>
+          </div>
+          <!-- Setup-Felder -->
+          <div x-show="showWgSetup" class="space-y-2">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">Server-IP (WG)</label>
+                <input x-model="wgSetupData.server_ip" type="text" placeholder="10.100.0.1"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">Pi-IP (WG)</label>
+                <input x-model="wgSetupData.peer_ip" type="text" placeholder="10.100.0.2"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">WG-Port</label>
+                <input x-model.number="wgSetupData.listen_port" type="number"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">ETS-Port</label>
+                <input x-model.number="wgSetupData.ets_port" type="number"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">KNX-Gateway-IP (Pi)</label>
+                <input x-model="wgSetupData.knx_ip" type="text" placeholder="192.168.1.100"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-0.5">Öff. Server-IP</label>
+                <input x-model="wgSetupData.server_public_ip" type="text" placeholder="1.2.3.4"
+                       class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+            </div>
+            <p x-show="wgSetupError" x-text="wgSetupError" class="text-xs text-red-600"></p>
+            <p x-show="wgSetupResult" class="text-xs text-green-700">
+              Tunnel aktiv. Server-Public-Key: <span class="font-mono break-all" x-text="wgSetupResult"></span>
+            </p>
+            <button @click="wgSetup()"
+                    class="w-full bg-indigo-600 text-white text-xs font-semibold py-1.5 rounded hover:bg-indigo-700 transition-colors">
+              Tunnel initialisieren
+            </button>
+          </div>
+          <!-- Aktions-Buttons -->
+          <div class="flex flex-wrap gap-1.5">
+            <button @click="showWgSetup = !showWgSetup"
+                    class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+                    x-text="showWgSetup ? 'Einstellungen ↑' : 'Einstellungen ↓'"></button>
+            <button x-show="wireguardEnabled" @click="wgDownloadPeerConfig()"
+                    class="text-xs px-2 py-1 rounded border border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+              Pi-Konfiguration ↓
+            </button>
+            <button x-show="wireguardEnabled" @click="wgToggleEts()"
+                    :class="wireguardEtsPortActive ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-gray-50 text-gray-700 border-gray-300'"
+                    class="text-xs px-2 py-1 rounded border hover:opacity-80"
+                    x-text="wireguardEtsPortActive ? 'ETS-Zugang deaktivieren' : 'ETS-Zugang aktivieren'"></button>
+            <button x-show="wireguardEnabled" @click="wgMeasureLatency()"
+                    class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">
+              Jetzt messen
+            </button>
+            <button x-show="wireguardEnabled" @click="wgTeardown()"
+                    class="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+              Tunnel abbauen
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -640,8 +732,11 @@
                                @keydown.enter="writeGA(ga.address)"
                                class="w-20 border border-gray-300 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
                       </template>
-                      <button @click="writeGA(ga.address)" title="Schreiben"
-                              class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700">↑</button>
+                      <button @click="canWriteGA() && writeGA(ga.address)"
+                              :disabled="!canWriteGA()"
+                              :title="wgActionTooltip('ga_rw') || 'Schreiben'"
+                              :class="canWriteGA() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
+                              class="text-xs text-white px-2 py-0.5 rounded">↑</button>
                       <button @click="gaIsReadable(ga) && readGA(ga.address)"
                               :title="gaIsReadable(ga) ? 'Lesen (R-Flag gesetzt)' : 'Nicht lesbar (kein R-Flag)'"
                               :class="gaIsReadable(ga)
@@ -978,6 +1073,17 @@ function app() {
     editingKey: '',
     editValue: '',
 
+    // WireGuard
+    wireguardEnabled: false,
+    wireguardLatencyMs: null,
+    wireguardPeerConnected: false,
+    wireguardAllowedActions: ['monitor'],
+    wireguardEtsPortActive: false,
+    showWgSetup: false,
+    wgSetupData: { server_ip: '10.100.0.1', peer_ip: '10.100.0.2', listen_port: 51820, ets_port: 13671, knx_ip: '', knx_port: 3671, server_public_ip: '' },
+    wgSetupResult: '',
+    wgSetupError: '',
+
     async init() {
       try {
         const res = await fetch('/api/mode');
@@ -1015,6 +1121,111 @@ function app() {
           this.remoteGatewayToken = cfg.remote_gateway_token || '';
         }
       } catch (_) {}
+      try {
+        const wgRes = await fetch('/api/wireguard/status');
+        if (wgRes.ok) {
+          const wg = await wgRes.json();
+          this.wireguardEnabled = wg.enabled || false;
+          this.wireguardLatencyMs = wg.latency_ms ?? null;
+          this.wireguardPeerConnected = wg.peer_connected || false;
+          this.wireguardAllowedActions = wg.allowed_actions || ['monitor'];
+          this.wireguardEtsPortActive = wg.ets_port_active || false;
+        }
+        const wgCfgRes = await fetch('/api/wireguard/config');
+        if (wgCfgRes.ok) {
+          const wgCfg = await wgCfgRes.json();
+          this.wgSetupData.server_ip = wgCfg.wireguard_server_ip || '10.100.0.1';
+          this.wgSetupData.peer_ip = wgCfg.wireguard_peer_ip || '10.100.0.2';
+          this.wgSetupData.listen_port = wgCfg.wireguard_listen_port || 51820;
+          this.wgSetupData.ets_port = wgCfg.wireguard_ets_port || 13671;
+          this.wgSetupData.knx_ip = wgCfg.wireguard_knx_ip || '';
+          this.wgSetupData.knx_port = wgCfg.wireguard_knx_port || 3671;
+        }
+      } catch (_) {}
+    },
+
+    wgLatencyColor() {
+      if (this.wireguardLatencyMs === null) return 'bg-red-500';
+      if (this.wireguardLatencyMs < 50) return 'bg-green-500';
+      if (this.wireguardLatencyMs < 150) return 'bg-yellow-400';
+      if (this.wireguardLatencyMs < 500) return 'bg-orange-500';
+      return 'bg-red-500';
+    },
+
+    canWriteGA() {
+      if (!this.wireguardEnabled) return true;
+      return this.wireguardAllowedActions.includes('ga_rw');
+    },
+
+    wgActionTooltip(action) {
+      if (this.wireguardAllowedActions.includes(action)) return '';
+      return `Latenz zu hoch (${this.wireguardLatencyMs} ms) — nicht verfügbar`;
+    },
+
+    async wgSetup() {
+      this.wgSetupResult = '';
+      this.wgSetupError = '';
+      try {
+        const res = await fetch('/api/wireguard/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.wgSetupData),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.wireguardEnabled = true;
+          this.wgSetupResult = data.server_public_key || 'OK';
+        } else {
+          this.wgSetupError = data.detail || 'Fehler';
+        }
+      } catch (e) {
+        this.wgSetupError = 'Netzwerkfehler: ' + e.message;
+      }
+    },
+
+    async wgTeardown() {
+      if (!confirm('WireGuard-Tunnel abbauen?')) return;
+      try {
+        const res = await fetch('/api/wireguard/setup', { method: 'DELETE' });
+        if (res.ok) {
+          this.wireguardEnabled = false;
+          this.wireguardLatencyMs = null;
+          this.wireguardAllowedActions = ['monitor'];
+          this.wireguardEtsPortActive = false;
+        }
+      } catch (_) {}
+    },
+
+    async wgToggleEts() {
+      try {
+        const res = await fetch('/api/wireguard/ets-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enable: !this.wireguardEtsPortActive }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          this.wireguardEtsPortActive = data.ets_port_active;
+        }
+      } catch (_) {}
+    },
+
+    async wgMeasureLatency() {
+      try {
+        const res = await fetch('/api/wireguard/latency-test', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          this.wireguardLatencyMs = data.latency_ms;
+          this.wireguardAllowedActions = data.allowed_actions;
+        }
+      } catch (_) {}
+    },
+
+    async wgDownloadPeerConfig() {
+      const a = document.createElement('a');
+      a.href = '/api/wireguard/peer-config';
+      a.download = 'wg0_client.conf';
+      a.click();
     },
 
     startEdit(type, key, field, current) {
@@ -1111,6 +1322,10 @@ function app() {
           if (!this.liveLogPaused) {
             this.liveLog = [msg, ...this.liveLog].slice(0, 1000);
           }
+        } else if (msg.type === 'wireguard_status') {
+          this.wireguardLatencyMs = msg.latency_ms;
+          this.wireguardPeerConnected = msg.peer_connected;
+          this.wireguardAllowedActions = msg.allowed_actions;
         }
       };
       this.ws.onclose = () => {

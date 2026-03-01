@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# knx_tunnel — Startskript für den KNX Tunnel Agent (Mac / Linux / Raspberry Pi)
+#
+# Verwendung:
+#   ./knx_tunnel setup                         Venv prüfen/erstellen & Pakete installieren
+#   ./knx_tunnel [OPTIONEN]                    Tunnel Agent starten
+#
+# Optionen (werden direkt an knx_tunnel_agent.py weitergegeben):
+#   --server-url URL      HTTP(S)-URL des OpenKNXViewer-Servers
+#   --server-token TOKEN  Authentifizierungs-Token (aus Gateway-Modal)
+#   --knx-ip IP           IP des lokalen KNX/IP-Gateways
+#   --wg-iface IFACE      WireGuard-Interface (Standard: wg0)
+#   --peer-ip IP          Pi-IP im Tunnel (Standard: 10.100.0.2)
+#   --server-wg-ip IP     Server-IP im Tunnel (Standard: 10.100.0.1)
+#   --server-wg-port PORT WG-Listen-Port des Servers (Standard: 51820)
+#   --echo-port PORT      UDP-Echo-Port (Standard: 51821)
+#   --ssl-no-verify       TLS-Zertifikat nicht prüfen (nur für Tests)
+#
+# Konfigurationsdatei (Alternative zu CLI-Argumenten):
+#   tunnel_config.json im selben Verzeichnis anlegen:
+#   {"server_url": "https://...", "server_token": "...", "knx_ip": "192.168.1.100"}
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENT_SCRIPT="$SCRIPT_DIR/knx_tunnel_agent.py"
+TUNNEL_CFG="$SCRIPT_DIR/tunnel_config.json"
+VENV_DIR="$SCRIPT_DIR/.venv-proxy"   # dasselbe venv wie knx_proxy
+VENV_PYTHON="$VENV_DIR/bin/python3"
+
+# ── Python-Interpreter finden ─────────────────────────────────────────────────
+_find_system_python() {
+    for py in python3 python; do
+        if command -v "$py" &>/dev/null; then
+            local ver
+            ver=$("$py" -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo "")
+            if [[ "$ver" == "3" ]]; then
+                echo "$py"; return
+            fi
+        fi
+    done
+    echo ""
+}
+
+# ── setup ─────────────────────────────────────────────────────────────────────
+cmd_setup() {
+    local py
+    py=$(_find_system_python)
+    if [[ -z "$py" ]]; then
+        echo "Fehler: Python 3 nicht gefunden."
+        echo "  Raspberry Pi / Debian:  sudo apt install python3 python3-venv python3-pip wireguard"
+        echo "  macOS:                  brew install python wireguard-tools"
+        exit 1
+    fi
+
+    echo "==> Verwende System-Python: $("$py" --version)"
+
+    # Venv erstellen falls noch nicht vorhanden
+    if [[ ! -f "$VENV_PYTHON" ]]; then
+        echo "==> Erstelle virtuelle Umgebung in $VENV_DIR …"
+        "$py" -m venv "$VENV_DIR"
+        echo "==> Installiere Abhängigkeiten (xknx, websockets) …"
+        "$VENV_PYTHON" -m pip install --upgrade pip --quiet
+        "$VENV_PYTHON" -m pip install xknx websockets --quiet
+    else
+        echo "==> Virtuelle Umgebung bereits vorhanden ($VENV_DIR)"
+    fi
+
+    # requests installieren (wird vom Tunnel Agent benötigt)
+    echo "==> Installiere requests …"
+    "$VENV_PYTHON" -m pip install requests --quiet
+
+    echo ""
+    echo "Fertig! Tunnel Agent starten mit:"
+    echo "  ./knx_tunnel --server-url \"https://host\" --server-token TOKEN --knx-ip 192.168.1.100"
+    echo ""
+    echo "Voraussetzungen auf dem Raspberry Pi:"
+    echo "  sudo apt install wireguard wireguard-tools"
+}
+
+# ── Venv-Prüfung ──────────────────────────────────────────────────────────────
+_check_venv() {
+    if [[ ! -f "$VENV_PYTHON" ]]; then
+        echo "Fehler: Virtuelle Umgebung nicht gefunden."
+        echo "Bitte zuerst ausführen:  ./knx_tunnel setup"
+        exit 1
+    fi
+}
+
+# ── Tunnel Agent starten ──────────────────────────────────────────────────────
+cmd_start() {
+    _check_venv
+
+    # tunnel_config.json anzeigen wenn vorhanden
+    if [[ -f "$TUNNEL_CFG" ]]; then
+        echo "Konfiguration aus tunnel_config.json:"
+        "$VENV_PYTHON" - "$TUNNEL_CFG" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k, v in d.items():
+    if k == 'server_token':
+        print(f"  {k}: ***")
+    elif k != 'ssl_no_verify' or v:
+        print(f"  {k}: {v}")
+EOF
+    fi
+
+    # Ohne Argumente und ohne Config: Hilfe anzeigen
+    if [[ $# -eq 0 && ! -f "$TUNNEL_CFG" ]]; then
+        echo ""
+        echo "Verwendung: ./knx_tunnel [OPTIONEN]"
+        echo ""
+        echo "  --server-url URL      HTTP(S)-URL des Servers"
+        echo "  --server-token TOKEN  Authentifizierungs-Token"
+        echo "  --knx-ip IP           IP des lokalen KNX/IP-Gateways"
+        echo "  --wg-iface IFACE      WireGuard-Interface (Standard: wg0)"
+        echo "  --peer-ip IP          Pi-IP im Tunnel (Standard: 10.100.0.2)"
+        echo "  --server-wg-ip IP     Server-IP im Tunnel (Standard: 10.100.0.1)"
+        echo "  --server-wg-port PORT WG-Listen-Port des Servers (Standard: 51820)"
+        echo "  --echo-port PORT      UDP-Echo-Port (Standard: 51821)"
+        echo "  --ssl-no-verify       TLS-Zertifikat nicht prüfen (nur Tests)"
+        echo ""
+        echo "Alternativ: tunnel_config.json im selben Verzeichnis anlegen:"
+        echo '  {"server_url":"https://...","server_token":"...","knx_ip":"192.168.1.100"}'
+        echo ""
+        echo "Venv einrichten:  ./knx_tunnel setup"
+        exit 0
+    fi
+
+    echo "Starte KNX Tunnel Agent …"
+    exec "$VENV_PYTHON" "$AGENT_SCRIPT" "$@"
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────────
+case "${1:-}" in
+    setup) shift; cmd_setup ;;
+    *)           cmd_start "$@" ;;
+esac
