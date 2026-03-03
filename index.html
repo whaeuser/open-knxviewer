@@ -85,13 +85,16 @@
         <button @click="exportMarkdown()" class="text-sm text-gray-600 hover:text-gray-900">↓ Markdown</button>
         <button @click="exportPDF()" class="text-sm text-gray-600 hover:text-gray-900">↓ PDF</button>
         <button @click="reset()" class="text-sm text-blue-600 hover:underline">Neue Datei laden</button>
-        <!-- Connection indicator (hidden in public mode) -->
+        <!-- Connection indicator + settings (private mode) -->
         <span x-show="!publicMode" class="flex items-center gap-1.5 text-sm border-l pl-4">
           <span class="w-2 h-2 rounded-full flex-shrink-0"
                 :class="wsStatus === 'connected' ? 'bg-green-500' : 'bg-red-400'"></span>
           <span class="text-gray-600" x-text="wsStatus === 'connected' ? (connectionType === 'remote_gateway' ? 'Remote-Gateway' : gatewayIP) : 'Kein Gateway'"></span>
-          <button @click="showGatewayConfig = true" class="text-gray-400 hover:text-gray-700 ml-0.5" title="Gateway konfigurieren">⚙</button>
+          <button @click="showGatewayConfig = true" class="text-gray-400 hover:text-gray-700 ml-0.5" title="Einstellungen">⚙</button>
         </span>
+        <!-- Settings button (public mode only) -->
+        <button x-show="publicMode" @click="showGatewayConfig = true"
+                class="text-gray-400 hover:text-gray-700 border-l pl-4" title="Einstellungen">⚙</button>
         <!-- WireGuard latency indicator -->
         <span x-show="!publicMode && wireguardEnabled"
               class="flex items-center gap-1 text-xs border-l pl-3 font-mono"
@@ -107,8 +110,8 @@
          class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
          @keydown.escape.window="showGatewayConfig = false">
       <div class="bg-white rounded-xl p-6 shadow-2xl" style="width:22rem">
-        <h3 class="text-base font-semibold text-gray-800 mb-4">KNX Gateway</h3>
-        <div class="space-y-3">
+        <h3 class="text-base font-semibold text-gray-800 mb-4" x-text="publicMode ? 'Einstellungen' : 'KNX Gateway'"></h3>
+        <div x-show="!publicMode" class="space-y-3">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Verbindungstyp</label>
             <select x-model="connectionType"
@@ -159,11 +162,26 @@
           </div>
         </div>
         <p x-show="gatewayError" x-text="gatewayError" class="mt-2 text-sm text-red-600"></p>
+
+        <!-- Export-Einstellungen (beide Modi) -->
+        <div :class="publicMode ? '' : 'mt-5 pt-4 border-t border-gray-200'">
+          <h4 x-show="!publicMode" class="text-sm font-semibold text-gray-700 mb-3">Export</h4>
+          <label class="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" x-model="exportDetailed"
+                   class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            <span class="text-sm text-gray-700">
+              Ausführlicher Export
+              <span class="block text-xs text-gray-400 mt-0.5">Kommunikationsobjekte enthalten GA-Name und Beschreibung</span>
+            </span>
+          </label>
+        </div>
+
         <div class="flex gap-2 mt-5">
-          <button @click="saveGatewayConfig()"
+          <button x-show="!publicMode" @click="saveGatewayConfig()"
                   class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700 transition-colors">Speichern</button>
           <button @click="showGatewayConfig = false; gatewayError = ''"
-                  class="flex-1 bg-gray-100 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-200 transition-colors">Abbrechen</button>
+                  class="flex-1 bg-gray-100 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  x-text="publicMode ? 'Schließen' : 'Abbrechen'"></button>
         </div>
 
         <!-- Gateway Description -->
@@ -1290,6 +1308,7 @@ function app() {
     gatewayLanguage: 'de-DE',
     gatewayError: '',
     showGatewayConfig: false,
+    exportDetailed: false,
     connectionType: 'local',
     remoteGatewayToken: '',
     remoteGatewayConnected: false,
@@ -2081,8 +2100,15 @@ function app() {
         lines.push(`### ${e(group.addr)} – ${e(group.deviceName)}`, '');
         lines.push('| KO-Nr. | Name | DPT | Flags | Gruppenadressen |');
         lines.push('|--------|------|-----|-------|-----------------|');
-        for (const co of group.cos)
-          lines.push(`| ${co.number} | ${e(co.name)} | ${e(d(co.dpts?.[0]))} | ${e(this.flagString(co))} | ${e((co.group_address_links ?? []).join(', ') || '—')} |`);
+        for (const co of group.cos) {
+          const gaStr = this.exportDetailed
+            ? (co.group_address_links ?? []).map(addr => {
+                const ga = this.gaByAddress[addr];
+                return ga ? (ga.description ? `${addr} ${ga.name} — ${ga.description}` : `${addr} ${ga.name}`) : addr;
+              }).join('; ') || '—'
+            : (co.group_address_links ?? []).join(', ') || '—';
+          lines.push(`| ${co.number} | ${e(co.name)} | ${e(d(co.dpts?.[0]))} | ${e(this.flagString(co))} | ${e(gaStr)} |`);
+        }
         lines.push('');
       }
 
@@ -2228,8 +2254,18 @@ function app() {
       html += '<h2>Kommunikationsobjekte</h2><table><thead><tr><th>KO-Nr.</th><th>Name</th><th>DPT</th><th>Flags</th><th>Gruppenadressen</th></tr></thead><tbody>';
       for (const group of this.cosByDevice) {
         html += `<tr class="dh"><td colspan="5">${esc(group.addr)} – ${esc(group.deviceName)}</td></tr>`;
-        for (const co of group.cos)
-          html += `<tr><td class="mono">${esc(co.number)}</td><td>${esc(co.name)}</td><td class="mono">${esc(d(co.dpts?.[0]))}</td><td class="mono">${esc(this.flagString(co))}</td><td class="mono">${esc((co.group_address_links??[]).join(', ')||'—')}</td></tr>`;
+        for (const co of group.cos) {
+          const gaCell = this.exportDetailed
+            ? (co.group_address_links ?? []).map(addr => {
+                const ga = this.gaByAddress[addr];
+                if (!ga) return esc(addr);
+                return ga.description
+                  ? `${esc(addr)} ${esc(ga.name)} — ${esc(ga.description)}`
+                  : `${esc(addr)} ${esc(ga.name)}`;
+              }).join('<br>') || '—'
+            : esc((co.group_address_links ?? []).join(', ') || '—');
+          html += `<tr><td class="mono">${esc(co.number)}</td><td>${esc(co.name)}</td><td class="mono">${esc(d(co.dpts?.[0]))}</td><td class="mono">${esc(this.flagString(co))}</td><td class="mono">${gaCell}</td></tr>`;
+        }
       }
       html += '</tbody></table>';
 
