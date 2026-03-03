@@ -128,15 +128,25 @@ def _extract_security_data(tmp_path: str, password: str, project: dict) -> dict:
                         pwd = bi.get("Password")
                         if pwd:
                             bus_ifaces.append({"ref_id": bi.get("RefId", ""), "password": pwd})
+                    tool_key = sec.get("ToolKey")
+                    device_auth_code = sec.get("DeviceAuthenticationCode")
+                    device_mgmt_password = sec.get("DeviceManagementPassword")
+                    sequence_number = sec.get("SequenceNumber")
+                    # Skip devices with only a default SequenceNumber="0" and no actual keys/passwords
+                    # (ETS writes <Security SequenceNumber="0"/> to all devices even in non-secure projects)
+                    has_keys = tool_key or device_auth_code or device_mgmt_password or bus_ifaces
+                    has_nonzero_seq = sequence_number not in (None, "0")
+                    if not has_keys and not has_nonzero_seq:
+                        continue
                     result["devices"].append({
                         "address": ia,
                         "name": dev_info.get("name") or dev.get("Name") or "",
                         "ip_address": ip_cfg.get("IPAddress") if ip_cfg is not None else None,
                         "mac_address": ip_cfg.get("MACAddress") if ip_cfg is not None else None,
-                        "tool_key": sec.get("ToolKey"),
-                        "device_auth_code": sec.get("DeviceAuthenticationCode"),
-                        "device_mgmt_password": sec.get("DeviceManagementPassword"),
-                        "sequence_number": sec.get("SequenceNumber"),
+                        "tool_key": tool_key,
+                        "device_auth_code": device_auth_code,
+                        "device_mgmt_password": device_mgmt_password,
+                        "sequence_number": sequence_number,
                         "bus_interfaces": bus_ifaces or None,
                     })
 
