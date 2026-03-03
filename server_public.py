@@ -5,8 +5,12 @@ Safe to expose to the internet.
 Run with:
   .venv/bin/uvicorn server_public:app --host 0.0.0.0 --port 8004
 """
+import logging
 import os
 import tempfile
+import time
+from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -22,8 +26,20 @@ from xknxproject.zip.extractor import extract as knxproj_extract
 
 INDEX_HTML = Path(__file__).parent / "index.html"
 DEMO_PATH = Path(__file__).parent / "demo.knxproj"
+ACCESS_LOG = Path(__file__).parent / "logs" / "access_public.log"
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+# ── Access-Logger ─────────────────────────────────────────────────────────────
+ACCESS_LOG.parent.mkdir(exist_ok=True)
+_access_handler = TimedRotatingFileHandler(
+    ACCESS_LOG, when="midnight", backupCount=30, encoding="utf-8"
+)
+_access_handler.setFormatter(logging.Formatter("%(message)s"))
+access_log = logging.getLogger("access_public")
+access_log.setLevel(logging.INFO)
+access_log.addHandler(_access_handler)
+access_log.propagate = False
 
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 app = FastAPI(title="Open-KNXViewer (Public)", docs_url=None, redoc_url=None)
@@ -49,7 +65,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class AccessLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start = time.monotonic()
+        response = await call_next(request)
+        duration = time.monotonic() - start
+        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "-").split(",")[0].strip()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        access_log.info("%s | %-15s | %-6s | %-30s | %s | %.3fs",
+                        ts, ip, request.method, request.url.path,
+                        response.status_code, duration)
+        return response
+
+
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AccessLogMiddleware)
 
 _demo_cache = None
 
