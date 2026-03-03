@@ -121,7 +121,6 @@ docker compose up -d --build
 
 Access-Logs werden in `./logs/access_public.log` auf dem Host gespeichert (als Volume eingebunden).
 
-> Der private Server ist nicht als Docker-Image verfügbar — er benötigt direkten UDP-Zugang zum KNX/IP-Gateway auf Port 3671.
 
 ### Windows
 
