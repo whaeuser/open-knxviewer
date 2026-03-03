@@ -9,8 +9,12 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from xknxproject import XKNXProj
 from xknxproject.exceptions import InvalidPasswordException, XknxProjectException
@@ -19,7 +23,33 @@ from xknxproject.zip.extractor import extract as knxproj_extract
 INDEX_HTML = Path(__file__).parent / "index.html"
 DEMO_PATH = Path(__file__).parent / "demo.knxproj"
 
-app = FastAPI(title="Open-KNXViewer (Public)")
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+app = FastAPI(title="Open-KNXViewer (Public)", docs_url=None, redoc_url=None)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self' data:; "
+            "frame-ancestors 'none';"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 _demo_cache = None
 
@@ -139,14 +169,25 @@ async def get_demo():
 
 
 @app.post("/api/parse")
+@limiter.limit("5/minute")
 async def parse_project(
+    request: Request,
     file: UploadFile = File(...),
     password: str = Form(default=""),
     language: str = Form(default="de-DE"),
 ):
-    suffix = Path(file.filename or "project.knxproj").suffix or ".knxproj"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await file.read())
+    # 4. Dateiendung validieren
+    suffix = Path(file.filename or "project.knxproj").suffix.lower()
+    if suffix != ".knxproj":
+        raise HTTPException(status_code=400, detail="Nur .knxproj-Dateien sind erlaubt.")
+
+    # 1. Dateigröße begrenzen
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Datei zu groß (max. 50 MB).")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".knxproj", mode="wb") as tmp:
+        tmp.write(data)
         tmp_path = tmp.name
 
     try:
