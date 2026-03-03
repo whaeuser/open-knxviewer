@@ -100,6 +100,29 @@ Voraussetzung: Python 3.10+ muss auf dem System installiert sein (alle weiteren 
 
 Beide Server können gleichzeitig laufen.
 
+### Docker (öffentlicher Server)
+
+Der öffentliche Server lässt sich als Docker-Container betreiben — kein Python-Setup auf dem Host erforderlich.
+
+```bash
+# Bauen und starten
+docker compose up -d --build
+# → http://localhost:8004
+
+# Stoppen
+docker compose down
+
+# Logs ansehen
+docker compose logs -f
+
+# Nach einem Update neu bauen
+docker compose up -d --build
+```
+
+Access-Logs werden in `./logs/access_public.log` auf dem Host gespeichert (als Volume eingebunden).
+
+> Der private Server ist nicht als Docker-Image verfügbar — er benötigt direkten UDP-Zugang zum KNX/IP-Gateway auf Port 3671.
+
 ### Windows
 
 > **Hinweis:** Die Windows-Version (`openknxviewer.bat`) wurde bisher nicht getestet.
