@@ -390,6 +390,54 @@ EOF
     echo "Logs: $LOG_DIR/"
 }
 
+# ── stats ─────────────────────────────────────────────────────────────────────
+cmd_stats() {
+    if ! command -v goaccess &>/dev/null; then
+        echo "Fehler: goaccess ist nicht installiert."
+        echo "  Debian/Ubuntu: apt install goaccess"
+        echo "  macOS:         brew install goaccess"
+        exit 1
+    fi
+
+    local html=false output=""
+    local args=("$@") i=0
+    while [[ $i -lt ${#args[@]} ]]; do
+        case "${args[$i]}" in
+            --html)
+                html=true
+                output="$LOG_DIR/stats.html"
+                ;;
+            --output|-o)
+                html=true
+                i=$((i+1)); output="${args[$i]}"
+                ;;
+        esac
+        i=$((i+1))
+    done
+
+    local log_file="$LOG_DIR/access_public.log"
+    if [[ ! -f "$log_file" ]]; then
+        echo "Keine Logdatei vorhanden: $log_file"
+        exit 1
+    fi
+
+    local goaccess_args=(
+        "$log_file"
+        --log-format="%d %t | %h | %m | %U | %s | %^"
+        --date-format="%Y-%m-%d"
+        --time-format="%H:%M:%S"
+        --invalid-requests=/dev/null
+        --no-global-config
+    )
+
+    if $html; then
+        goaccess "${goaccess_args[@]}" --output="$output"
+        echo "Bericht gespeichert: $output"
+    else
+        goaccess "${goaccess_args[@]}"
+    fi
+}
+
 # ── update ────────────────────────────────────────────────────────────────────
 cmd_test() {
     _check_venv
@@ -424,6 +472,7 @@ usage() {
     echo "  gateway --ip X [--port Y] [--language L]    KNX-Gateway konfigurieren"
     echo "  test   [-v] [-k AUSDRUCK]                   Tests ausführen
   update                                      Alle Pakete aktualisieren"
+    echo "  stats  [--html] [--output DATEI]            Access-Log mit GoAccess auswerten"
     echo "  autostart          [--public]               macOS LaunchAgent installieren"
     echo "  autostart --remove [--public]               macOS LaunchAgent entfernen"
 }
@@ -438,6 +487,7 @@ case "${1:-}" in
     gateway)   shift; cmd_gateway   "$@" ;;
     test)      shift; cmd_test      "$@" ;;
     update)    shift; cmd_update    "$@" ;;
+    stats)     shift; cmd_stats     "$@" ;;
     autostart) shift; cmd_autostart "$@" ;;
     *)         usage; exit 1 ;;
 esac

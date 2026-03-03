@@ -72,7 +72,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         duration = time.monotonic() - start
         ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "-").split(",")[0].strip()
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        access_log.info("%s | %-15s | %-6s | %-30s | %s | %.3fs",
+        access_log.info("%s | %s | %s | %s | %s | %.3fs",
                         ts, ip, request.method, request.url.path,
                         response.status_code, duration)
         return response
