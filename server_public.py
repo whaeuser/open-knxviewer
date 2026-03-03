@@ -207,8 +207,8 @@ async def parse_project(
     language: str = Form(default="de-DE"),
 ):
     # 4. Dateiendung validieren
-    suffix = Path(file.filename or "project.knxproj").suffix.lower()
-    if suffix != ".knxproj":
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".knxproj"):
         raise HTTPException(status_code=400, detail="Nur .knxproj-Dateien sind erlaubt.")
 
     # 1. Dateigröße begrenzen
