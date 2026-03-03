@@ -1,0 +1,15 @@
+services:
+  knxviewer-public:
+    build:
+      context: .
+      dockerfile: Dockerfile.public
+    image: knxviewer-public
+    container_name: knxviewer-public
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    volumes:
+      # Logs persistent außerhalb des Containers speichern
+      - ./logs:/app/logs
+    environment:
+      - TZ=Europe/Berlin
