@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 last_project.json
+recent_projects.json
+projects/
 .server.pid
 .server-public.pid
 config.json

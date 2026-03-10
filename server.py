@@ -34,6 +34,9 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 ANNOTATIONS_PATH = Path(__file__).parent / "annotations.json"
 LOG_PATH = Path(__file__).parent / "logs" / "knx_bus.log"
 LAST_PROJECT_PATH = Path(__file__).parent / "last_project.json"
+RECENT_PROJECTS_PATH = Path(__file__).parent / "recent_projects.json"
+PROJECTS_DIR = Path(__file__).parent / "projects"
+MAX_RECENT_PROJECTS = 10
 
 state: dict = {
     "xknx": None,
@@ -96,6 +99,38 @@ def load_config() -> dict:
 
 def save_config(cfg: dict):
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+
+
+# ── Recent projects helpers ─────────────────────────────────────────────────────
+
+import re as _re
+
+def _project_slug(filename: str) -> str:
+    return _re.sub(r'[^\w.-]', '_', filename)
+
+def _load_recent_projects() -> list:
+    if not RECENT_PROJECTS_PATH.exists():
+        return []
+    try:
+        return json.loads(RECENT_PROJECTS_PATH.read_text())
+    except Exception:
+        return []
+
+def _add_to_recent_projects(filename: str, project: dict):
+    PROJECTS_DIR.mkdir(exist_ok=True)
+    slug = _project_slug(filename)
+    (PROJECTS_DIR / f"{slug}.json").write_text(json.dumps(project))
+    meta = {
+        "filename": filename,
+        "project_name": project.get("info", {}).get("name", ""),
+        "last_used": datetime.now().isoformat(timespec="seconds"),
+        "device_count": len(project.get("devices", {})),
+        "ga_count": len(project.get("group_addresses", {})),
+        "slug": slug,
+    }
+    recent = [r for r in _load_recent_projects() if r["filename"] != filename]
+    recent = [meta] + recent[:MAX_RECENT_PROJECTS - 1]
+    RECENT_PROJECTS_PATH.write_text(json.dumps(recent, indent=2))
 
 
 # ── WireGuard helpers ──────────────────────────────────────────────────────────
@@ -633,6 +668,36 @@ def get_last_project_data():
     if not state["project_data"]:
         raise HTTPException(status_code=404, detail="No project data")
     return JSONResponse(content=state["project_data"])
+
+
+@app.get("/api/recent-projects")
+def get_recent_projects():
+    return JSONResponse(content=_load_recent_projects())
+
+
+@app.get("/api/recent-projects/{slug}/data")
+def get_recent_project_data(slug: str):
+    p = PROJECTS_DIR / f"{slug}.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    data = json.loads(p.read_text())
+    recent = _load_recent_projects()
+    entry = next((r for r in recent if r["slug"] == slug), None)
+    if entry:
+        entry["last_used"] = datetime.now().isoformat(timespec="seconds")
+        recent = [entry] + [r for r in recent if r["slug"] != slug]
+        RECENT_PROJECTS_PATH.write_text(json.dumps(recent, indent=2))
+    return JSONResponse(content=data)
+
+
+@app.delete("/api/recent-projects/{slug}")
+def delete_recent_project(slug: str):
+    recent = [r for r in _load_recent_projects() if r["slug"] != slug]
+    RECENT_PROJECTS_PATH.write_text(json.dumps(recent, indent=2))
+    p = PROJECTS_DIR / f"{slug}.json"
+    if p.exists():
+        p.unlink()
+    return {"ok": True}
 
 
 @app.get("/api/annotations")
@@ -1539,6 +1604,7 @@ async def parse_project(
         cfg = load_config()
         cfg["last_project_filename"] = file.filename or "project.knxproj"
         save_config(cfg)
+        _add_to_recent_projects(file.filename or "project.knxproj", project)
 
         return JSONResponse(content=project)
     except InvalidPasswordException as exc:
