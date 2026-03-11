@@ -1656,6 +1656,7 @@ function app() {
     lastProjectFilename: '',
     recentProjects: [],
     selectedRecentSlug: null,
+    currentProjectSlug: null,
     projectNotes: {},
     notesModalOpen: false,
     notesModalSlug: null,
@@ -2084,6 +2085,7 @@ function app() {
         this.project = await res.json();
         this.phase = 'result';
         this.activeTab = 'info';
+        this.currentProjectSlug = this.selectedRecentSlug;
         this.selectedRecentSlug = null;
         this.loadRecentProjects();
       } catch (e) {
@@ -2695,6 +2697,7 @@ function app() {
         }
         this.project = await res.json();
         this.phase = 'result';
+        this.currentProjectSlug = null;
         this.loadRecentProjects();
         this.newLlmChat();
       } catch (e) {
@@ -2756,6 +2759,9 @@ function app() {
       lines.push('## Projektinformationen', '');
       for (const [key, val] of this.infoRows) lines.push(`- **${e(key)}:** ${e(val)}`);
       lines.push('');
+
+      const notes = this.currentProjectSlug ? this.projectNotes[this.currentProjectSlug] : null;
+      if (notes) lines.push('## Notizen', '', notes, '');
 
       lines.push('## Geräte', '');
       lines.push('| Adresse | Name | Hersteller | Bestellnr. | Applikation |');
@@ -2913,6 +2919,9 @@ function app() {
       for (const [key, val] of this.infoRows)
         html += `<dt>${esc(key)}</dt><dd>${esc(val)}</dd>`;
       html += '</dl>';
+
+      const notes = this.currentProjectSlug ? this.projectNotes[this.currentProjectSlug] : null;
+      if (notes) html += `<h2>Notizen</h2><div style="font-size:9pt;line-height:1.5">${this.renderMarkdown(notes)}</div>`;
 
       // Devices
       html += '<h2>Geräte</h2><table><thead><tr><th>Adresse</th><th>Name</th><th>Hersteller</th><th>Bestellnr.</th><th>Applikation</th></tr></thead><tbody>';
