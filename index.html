@@ -1320,6 +1320,168 @@
       </div>
     </div>
 
+    <!-- VERGLEICHEN TAB -->
+    <div x-show="activeTab === 'compare'">
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Projektvergleich</h2>
+
+        <!-- Auswahl Vergleichsprojekt -->
+        <div class="flex flex-wrap gap-2 items-center mb-4">
+          <span class="text-sm text-gray-600">Aktuelles Projekt:
+            <span class="font-medium" x-text="project?.info?.name ?? '—'"></span>
+          </span>
+          <span class="text-gray-400">vs</span>
+          <select x-model="compareSlug"
+                  class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="">— Vergleichsprojekt wählen —</option>
+            <template x-for="p in recentProjects" :key="p.slug">
+              <option :value="p.slug" x-text="p.filename"></option>
+            </template>
+          </select>
+          <button @click="loadCompareProject()" :disabled="!compareSlug || compareLoading"
+                  class="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            <span x-show="!compareLoading">Vergleich starten</span>
+            <span x-show="compareLoading">…</span>
+          </button>
+          <button x-show="compareDiff" @click="exportCompareDiff()"
+                  class="text-sm text-gray-600 hover:text-gray-900 ml-auto">↓ Markdown</button>
+        </div>
+
+        <p x-show="compareError" x-text="compareError" class="mb-3 text-sm text-red-600"></p>
+
+        <!-- Diff-Ergebnis -->
+        <template x-if="compareDiff">
+          <div>
+            <!-- Geräte -->
+            <div class="mb-6">
+              <h3 class="text-sm font-semibold text-gray-600 mb-2">
+                Geräte
+                <span class="ml-2 font-normal text-gray-400">
+                  +<span x-text="compareDiff.devices.added.length"></span>
+                  / -<span x-text="compareDiff.devices.removed.length"></span>
+                  / ~<span x-text="compareDiff.devices.changed.length"></span>
+                </span>
+              </h3>
+              <template x-if="compareDiff.devices.added.length === 0 && compareDiff.devices.removed.length === 0 && compareDiff.devices.changed.length === 0">
+                <p class="text-sm text-gray-400 italic">Keine Unterschiede bei Geräten</p>
+              </template>
+              <div class="space-y-1 text-sm font-mono">
+                <template x-for="d in compareDiff.devices.added" :key="'dev-add-'+d.individual_address">
+                  <div class="flex gap-2 px-3 py-1 rounded bg-green-50 border border-green-200">
+                    <span class="text-green-600 font-bold">+</span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="d.individual_address"></span>
+                    <span class="text-green-800" x-text="d.name"></span>
+                  </div>
+                </template>
+                <template x-for="d in compareDiff.devices.removed" :key="'dev-rem-'+d.individual_address">
+                  <div class="flex gap-2 px-3 py-1 rounded bg-red-50 border border-red-200">
+                    <span class="text-red-600 font-bold">-</span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="d.individual_address"></span>
+                    <span class="text-red-800" x-text="d.name"></span>
+                  </div>
+                </template>
+                <template x-for="c in compareDiff.devices.changed" :key="'dev-chg-'+c.individual_address">
+                  <div class="flex gap-2 px-3 py-1 rounded bg-yellow-50 border border-yellow-200">
+                    <span class="text-yellow-600 font-bold">~</span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="c.individual_address"></span>
+                    <span class="text-yellow-800">
+                      "<span x-text="c.nameA"></span>" → "<span x-text="c.nameB"></span>"
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Gruppenadressen -->
+            <div class="mb-6">
+              <h3 class="text-sm font-semibold text-gray-600 mb-2">
+                Gruppenadressen
+                <span class="ml-2 font-normal text-gray-400">
+                  +<span x-text="compareDiff.ga.added.length"></span>
+                  / -<span x-text="compareDiff.ga.removed.length"></span>
+                  / ~<span x-text="compareDiff.ga.changed.length"></span>
+                </span>
+              </h3>
+              <template x-if="compareDiff.ga.added.length === 0 && compareDiff.ga.removed.length === 0 && compareDiff.ga.changed.length === 0">
+                <p class="text-sm text-gray-400 italic">Keine Unterschiede bei Gruppenadressen</p>
+              </template>
+              <div class="space-y-1 text-sm font-mono">
+                <template x-for="ga in compareDiff.ga.added" :key="'ga-add-'+ga.address">
+                  <div class="flex gap-2 px-3 py-1 rounded bg-green-50 border border-green-200">
+                    <span class="text-green-600 font-bold">+</span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="ga.address"></span>
+                    <span class="text-green-800" x-text="ga.name"></span>
+                    <span x-show="ga.dpt" class="text-gray-400 text-xs ml-auto" x-text="ga.dpt ? '[DPT ' + _dptStr(ga.dpt) + ']' : ''"></span>
+                  </div>
+                </template>
+                <template x-for="ga in compareDiff.ga.removed" :key="'ga-rem-'+ga.address">
+                  <div class="flex gap-2 px-3 py-1 rounded bg-red-50 border border-red-200">
+                    <span class="text-red-600 font-bold">-</span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="ga.address"></span>
+                    <span class="text-red-800" x-text="ga.name"></span>
+                  </div>
+                </template>
+                <template x-for="c in compareDiff.ga.changed" :key="'ga-chg-'+c.address">
+                  <div :class="c.critical ? 'bg-orange-50 border-orange-300' : 'bg-yellow-50 border-yellow-200'"
+                       class="flex flex-wrap gap-2 px-3 py-1 rounded border">
+                    <span :class="c.critical ? 'text-orange-600' : 'text-yellow-600'" class="font-bold">
+                      <span x-show="c.critical">⚠</span>
+                      <span x-show="!c.critical">~</span>
+                    </span>
+                    <span class="text-gray-500 w-16 shrink-0" x-text="c.address"></span>
+                    <span x-show="c.nameA !== c.nameB" :class="c.critical ? 'text-orange-800' : 'text-yellow-800'">
+                      "<span x-text="c.nameA"></span>" → "<span x-text="c.nameB"></span>"
+                    </span>
+                    <span x-show="c.dptA !== c.dptB" :class="c.critical ? 'text-orange-800 font-semibold' : 'text-yellow-800'">
+                      DPT <span x-text="c.dptA || '–'"></span> → <span x-text="c.dptB || '–'"></span>
+                      <span x-show="c.critical" class="ml-1 text-xs bg-orange-200 text-orange-800 px-1 rounded">KRITISCH</span>
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- KI-Analyse -->
+            <hr class="border-gray-200 mb-4">
+            <template x-if="llmConfigured">
+              <div>
+                <div class="flex gap-2 items-center mb-3">
+                  <h3 class="text-sm font-semibold text-gray-600">KI-Analyse des Diffs</h3>
+                  <button @click="analyzeDiff()" :disabled="compareLlmLoading"
+                          class="bg-blue-600 text-white text-sm font-semibold px-4 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    <span x-show="!compareLlmLoading">Analysieren</span>
+                    <span x-show="compareLlmLoading">…</span>
+                  </button>
+                </div>
+                <p x-show="compareLlmError" x-text="compareLlmError" class="mb-3 text-sm text-red-600"></p>
+                <details x-show="compareLlmReasoning" class="mb-3">
+                  <summary class="text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">
+                    Denkprozess anzeigen
+                  </summary>
+                  <div class="mt-2 whitespace-pre-wrap text-xs text-gray-400 bg-gray-50 rounded p-3 border border-gray-100 max-h-48 overflow-y-auto leading-relaxed"
+                       x-text="compareLlmReasoning"></div>
+                </details>
+                <div x-show="compareLlmResponse"
+                     class="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 rounded-lg p-4 leading-relaxed border border-gray-200"
+                     x-text="compareLlmResponse"></div>
+                <p x-show="compareLlmLoading && compareLlmReasoning && !compareLlmResponse" class="text-sm text-gray-400 italic">
+                  Antwort wird formuliert …
+                </p>
+              </div>
+            </template>
+            <template x-if="!llmConfigured">
+              <p class="text-sm text-gray-400 italic">KI-Analyse erfordert einen OpenRouter API-Key (im ⚙ Gateway-Menü konfigurierbar).</p>
+            </template>
+          </div>
+        </template>
+
+        <!-- Leerzustand -->
+        <template x-if="!compareDiff && !compareLoading">
+          <p class="text-sm text-gray-400">Wähle ein Vergleichsprojekt und klicke auf „Vergleich starten".</p>
+        </template>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1351,6 +1513,7 @@ function app() {
       { id: 'bus_monitor', label: 'Bus-Monitor' },
       { id: 'bus_scan', label: 'Bus-Scan' },
       { id: 'ki_analyse', label: 'KI-Analyse' },
+      { id: 'compare', label: 'Vergleichen' },
     ],
     deviceSearch: '',
     gaSearch: '',
@@ -1390,6 +1553,17 @@ function app() {
     llmReasoning: '',
     llmLoading: false,
     llmError: '',
+
+    // Projektvergleich
+    compareSlug: null,
+    compareProject: null,
+    compareLoading: false,
+    compareError: '',
+    compareDiff: null,
+    compareLlmResponse: '',
+    compareLlmReasoning: '',
+    compareLlmLoading: false,
+    compareLlmError: '',
 
     // Annotations (editable device/GA metadata)
     annotations: { devices: {}, group_addresses: {} },
@@ -1526,7 +1700,9 @@ function app() {
     },
 
     wgActionTooltip(action) {
+      if (!this.wireguardEnabled) return '';
       if (this.wireguardAllowedActions.includes(action)) return '';
+      if (this.wireguardLatencyMs === null) return 'Keine Latenzmessung verfügbar';
       return `Latenz zu hoch (${this.wireguardLatencyMs} ms) — nicht verfügbar`;
     },
 
@@ -1974,6 +2150,141 @@ function app() {
       this._download(lines.join('\n'), `ki_analyse_${safe}.md`, 'text/markdown;charset=utf-8');
     },
 
+    computeProjectDiff(projA, projB) {
+      const gasA = {}, gasB = {};
+      for (const ga of Object.values(projA.group_addresses ?? {})) gasA[ga.address] = ga;
+      for (const ga of Object.values(projB.group_addresses ?? {})) gasB[ga.address] = ga;
+      const gaAdded = [], gaRemoved = [], gaChanged = [];
+      for (const addr of new Set([...Object.keys(gasA), ...Object.keys(gasB)])) {
+        if (!gasA[addr]) { gaAdded.push(gasB[addr]); continue; }
+        if (!gasB[addr]) { gaRemoved.push(gasA[addr]); continue; }
+        const a = gasA[addr], b = gasB[addr];
+        const dptA = a.dpt ? this._dptStr(a.dpt) : '';
+        const dptB = b.dpt ? this._dptStr(b.dpt) : '';
+        if (a.name !== b.name || dptA !== dptB)
+          gaChanged.push({ address: addr, nameA: a.name, nameB: b.name, dptA, dptB,
+            critical: dptA !== dptB && dptA !== '' && dptB !== '' });
+      }
+      const devsA = projA.devices ?? {}, devsB = projB.devices ?? {};
+      const devAdded = [], devRemoved = [], devChanged = [];
+      for (const addr of new Set([...Object.keys(devsA), ...Object.keys(devsB)])) {
+        if (!devsA[addr]) { devAdded.push({ ...devsB[addr], individual_address: addr }); continue; }
+        if (!devsB[addr]) { devRemoved.push({ ...devsA[addr], individual_address: addr }); continue; }
+        if (devsA[addr].name !== devsB[addr].name)
+          devChanged.push({ individual_address: addr, nameA: devsA[addr].name, nameB: devsB[addr].name });
+      }
+      return { ga: { added: gaAdded, removed: gaRemoved, changed: gaChanged },
+               devices: { added: devAdded, removed: devRemoved, changed: devChanged } };
+    },
+
+    buildDiffSummary(diff, projA, projB) {
+      const nameA = projA?.info?.name ?? 'Projekt A';
+      const nameB = projB?.info?.name ?? 'Projekt B';
+      const lines = [`Vergleich: "${nameA}" vs "${nameB}"`, '',
+        `GRUPPENADRESSEN: Neu (${diff.ga.added.length}), Entfernt (${diff.ga.removed.length}), Geändert (${diff.ga.changed.length})`];
+      for (const ga of diff.ga.added)
+        lines.push(`  + ${ga.address}: ${ga.name}${ga.dpt ? ' [DPT ' + this._dptStr(ga.dpt) + ']' : ''}`);
+      for (const ga of diff.ga.removed) lines.push(`  - ${ga.address}: ${ga.name}`);
+      for (const c of diff.ga.changed) {
+        if (c.dptA !== c.dptB) lines.push(`  ~ ${c.address}: DPT ${c.dptA||'–'} → ${c.dptB||'–'}${c.critical ? ' [KRITISCH]' : ''}`);
+        if (c.nameA !== c.nameB) lines.push(`  ~ ${c.address}: "${c.nameA}" → "${c.nameB}"`);
+      }
+      lines.push('', `GERÄTE: Neu (${diff.devices.added.length}), Entfernt (${diff.devices.removed.length}), Geändert (${diff.devices.changed.length})`);
+      for (const d of diff.devices.added) lines.push(`  + ${d.individual_address}: ${d.name}`);
+      for (const d of diff.devices.removed) lines.push(`  - ${d.individual_address}: ${d.name}`);
+      for (const c of diff.devices.changed) lines.push(`  ~ ${c.individual_address}: "${c.nameA}" → "${c.nameB}"`);
+      return lines.join('\n');
+    },
+
+    async loadCompareProject() {
+      if (!this.compareSlug) return;
+      this.compareLoading = true; this.compareError = ''; this.compareDiff = null;
+      this.compareProject = null; this.compareLlmResponse = ''; this.compareLlmReasoning = '';
+      try {
+        const res = await fetch(`/api/recent-projects/${encodeURIComponent(this.compareSlug)}/raw`);
+        if (!res.ok) { this.compareError = 'Projekt konnte nicht geladen werden'; return; }
+        this.compareProject = await res.json();
+        this.compareDiff = this.computeProjectDiff(this.project, this.compareProject);
+      } catch (e) { this.compareError = 'Netzwerkfehler: ' + e.message; }
+      finally { this.compareLoading = false; }
+    },
+
+    async analyzeDiff() {
+      if (!this.compareDiff) return;
+      this.compareLlmLoading = true; this.compareLlmError = '';
+      this.compareLlmResponse = ''; this.compareLlmReasoning = '';
+      const nameA = this.project?.info?.name ?? 'Projekt A';
+      const nameB = this.compareProject?.info?.name ?? 'Projekt B';
+      try {
+        const res = await fetch('/api/llm/compare', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diff_text: this.buildDiffSummary(this.compareDiff, this.project, this.compareProject), name_a: nameA, name_b: nameB }) });
+        if (!res.ok) { const err = await res.json(); this.compareLlmError = err.detail || 'Fehler'; return; }
+        const reader = res.body.getReader(); const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          for (const line of decoder.decode(value).split('\n')) {
+            if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+            try { const d = JSON.parse(line.slice(6)); if (d.error) { this.compareLlmError = d.error; break; }
+              const delta = d.choices?.[0]?.delta ?? {};
+              this.compareLlmReasoning += delta.reasoning ?? ''; this.compareLlmResponse += delta.content ?? '';
+            } catch (_) {}
+          }
+        }
+      } catch (e) { this.compareLlmError = 'Netzwerkfehler: ' + e.message; }
+      finally { this.compareLlmLoading = false; }
+    },
+
+    exportCompareDiff() {
+      const nameA = this.project?.info?.name ?? 'Projekt A';
+      const nameB = this.compareProject?.info?.name ?? 'Projekt B';
+      const lines = [`# Projektvergleich: ${nameA} vs ${nameB}`, ''];
+      // Geräte
+      lines.push('## Geräte', '');
+      if (this.compareDiff.devices.added.length) {
+        lines.push('### Neu hinzugefügt');
+        for (const d of this.compareDiff.devices.added) lines.push(`- + ${d.individual_address}: ${d.name}`);
+        lines.push('');
+      }
+      if (this.compareDiff.devices.removed.length) {
+        lines.push('### Entfernt');
+        for (const d of this.compareDiff.devices.removed) lines.push(`- - ${d.individual_address}: ${d.name}`);
+        lines.push('');
+      }
+      if (this.compareDiff.devices.changed.length) {
+        lines.push('### Geändert');
+        for (const c of this.compareDiff.devices.changed) lines.push(`- ~ ${c.individual_address}: "${c.nameA}" → "${c.nameB}"`);
+        lines.push('');
+      }
+      // Gruppenadressen
+      lines.push('## Gruppenadressen', '');
+      if (this.compareDiff.ga.added.length) {
+        lines.push('### Neu hinzugefügt');
+        for (const ga of this.compareDiff.ga.added) lines.push(`- + ${ga.address}: ${ga.name}${ga.dpt ? ' [DPT ' + this._dptStr(ga.dpt) + ']' : ''}`);
+        lines.push('');
+      }
+      if (this.compareDiff.ga.removed.length) {
+        lines.push('### Entfernt');
+        for (const ga of this.compareDiff.ga.removed) lines.push(`- - ${ga.address}: ${ga.name}`);
+        lines.push('');
+      }
+      if (this.compareDiff.ga.changed.length) {
+        lines.push('### Geändert');
+        for (const c of this.compareDiff.ga.changed) {
+          if (c.dptA !== c.dptB) lines.push(`- ${c.critical ? '⚠️ KRITISCH ' : ''}~ ${c.address}: DPT ${c.dptA||'–'} → ${c.dptB||'–'}`);
+          if (c.nameA !== c.nameB) lines.push(`- ~ ${c.address}: "${c.nameA}" → "${c.nameB}"`);
+        }
+        lines.push('');
+      }
+      if (this.compareLlmResponse) {
+        lines.push('---', '', '## KI-Analyse', '', this.compareLlmResponse);
+        if (this.compareLlmReasoning) lines.push('', '### Denkprozess', '', this.compareLlmReasoning);
+      }
+      const safeA = nameA.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeB = nameB.replace(/[^a-zA-Z0-9_-]/g, '_');
+      this._download(lines.join('\n'), `vergleich_${safeA}_vs_${safeB}.md`, 'text/markdown;charset=utf-8');
+    },
+
     async saveGatewayConfig() {
       this.gatewayError = '';
       try {
@@ -2008,6 +2319,7 @@ function app() {
         if (tab.id === 'bus_monitor') return !this.publicMode;
         if (tab.id === 'bus_scan') return !this.publicMode;
         if (tab.id === 'ki_analyse') return !this.publicMode && this.llmConfigured && !!this.project;
+        if (tab.id === 'compare') return !this.publicMode && this.recentProjects.length > 1 && !!this.project;
         return true;
       });
     },

@@ -700,6 +700,14 @@ def get_recent_project_data(slug: str):
     return JSONResponse(content=data)
 
 
+@app.get("/api/recent-projects/{slug}/raw")
+def get_recent_project_raw(slug: str):
+    p = PROJECTS_DIR / f"{slug}.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    return JSONResponse(content=json.loads(p.read_text()))
+
+
 @app.delete("/api/recent-projects/{slug}")
 def delete_recent_project(slug: str):
     recent = [r for r in _load_recent_projects() if r["slug"] != slug]
@@ -1468,6 +1476,49 @@ async def llm_analyze(data: dict):
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
+                json={"model": model, "messages": messages, "stream": True},
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    yield f"data: {json.dumps({'error': body.decode()})}\n\n"
+                    return
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        yield line + "\n\n"
+
+    return StreamingResponse(stream_llm(), media_type="text/event-stream")
+
+
+@app.post("/api/llm/compare")
+async def llm_compare(data: dict):
+    cfg = load_config()
+    api_key = cfg.get("openrouter_api_key", "")
+    model = cfg.get("llm_model", LLM_DEFAULT_MODEL)
+    diff_text = data.get("diff_text", "").strip()
+    name_a = data.get("name_a", "Projekt A")
+    name_b = data.get("name_b", "Projekt B")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API-Key nicht konfiguriert")
+    if not diff_text:
+        raise HTTPException(status_code=400, detail="Kein Diff-Text übergeben")
+    messages = [
+        {"role": "system", "content": (
+            "Du bist ein KNX-Experte. Analysiere die Unterschiede zwischen zwei KNX-Projekten "
+            "und bewerte deren Auswirkungen. Hebe kritische Änderungen (DPT-Wechsel) besonders "
+            "hervor. Antworte auf Deutsch, präzise und strukturiert."
+        )},
+        {"role": "user", "content": (
+            f"Vergleiche: Projekt A: {name_a} / Projekt B: {name_b}\n\n{diff_text}\n\n"
+            "Erkläre die Auswirkungen, hebe kritische Änderungen hervor, nenne nötige Anpassungen."
+        )},
+    ]
+
+    async def stream_llm():
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream(
+                "POST",
+                OPENROUTER_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": model, "messages": messages, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
