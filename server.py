@@ -16,7 +16,16 @@ from pathlib import Path
 from typing import Set
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from xknx import XKNX
@@ -74,8 +83,11 @@ WG_HELPER = "/usr/local/bin/openknxviewer-wg-helper"
 
 def load_config() -> dict:
     defaults = {
-        "gateway_ip": "", "gateway_port": 3671, "language": "de-DE",
-        "connection_type": "local", "remote_gateway_token": "",
+        "gateway_ip": "",
+        "gateway_port": 3671,
+        "language": "de-DE",
+        "connection_type": "local",
+        "remote_gateway_token": "",
         # WireGuard defaults
         "wireguard_enabled": False,
         "wireguard_interface": "wg0",
@@ -105,8 +117,10 @@ def save_config(cfg: dict):
 
 import re as _re
 
+
 def _project_slug(filename: str) -> str:
-    return _re.sub(r'[^\w.-]', '_', filename)
+    return _re.sub(r"[^\w.-]", "_", filename)
+
 
 def _load_recent_projects() -> list:
     if not RECENT_PROJECTS_PATH.exists():
@@ -115,6 +129,7 @@ def _load_recent_projects() -> list:
         return json.loads(RECENT_PROJECTS_PATH.read_text())
     except Exception:
         return []
+
 
 def _add_to_recent_projects(filename: str, project: dict):
     PROJECTS_DIR.mkdir(exist_ok=True)
@@ -129,22 +144,27 @@ def _add_to_recent_projects(filename: str, project: dict):
         "slug": slug,
     }
     recent = [r for r in _load_recent_projects() if r["filename"] != filename]
-    recent = [meta] + recent[:MAX_RECENT_PROJECTS - 1]
+    recent = [meta] + recent[: MAX_RECENT_PROJECTS - 1]
     RECENT_PROJECTS_PATH.write_text(json.dumps(recent, indent=2))
 
 
 # ── WireGuard helpers ──────────────────────────────────────────────────────────
 
+
 async def _wg_run(*args: str) -> str:
     """Run wg_helper via sudo and return stdout, raise RuntimeError on failure."""
     proc = await asyncio.create_subprocess_exec(
-        "sudo", WG_HELPER, *args,
+        "sudo",
+        WG_HELPER,
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(stderr.decode().strip() or f"wg_helper exited {proc.returncode}")
+        raise RuntimeError(
+            stderr.decode().strip() or f"wg_helper exited {proc.returncode}"
+        )
     return stdout.decode().strip()
 
 
@@ -155,7 +175,8 @@ async def wg_setup(cfg: dict) -> str:
     # genkey writes private key to file, prints public key to stdout
     pub_key = await _wg_run("genkey", privkey_file)
     await _wg_run(
-        "setup", iface,
+        "setup",
+        iface,
         cfg["wireguard_server_ip"],
         cfg["wireguard_peer_ip"],
         str(cfg["wireguard_listen_port"]),
@@ -166,7 +187,9 @@ async def wg_setup(cfg: dict) -> str:
 
 async def wg_add_peer(public_key: str, cfg: dict) -> None:
     """Add peer live: wg set <iface> peer <key> allowed-ips <peer_ip>/32."""
-    await _wg_run("peer-add", cfg["wireguard_interface"], public_key, cfg["wireguard_peer_ip"])
+    await _wg_run(
+        "peer-add", cfg["wireguard_interface"], public_key, cfg["wireguard_peer_ip"]
+    )
 
 
 async def wg_get_status(iface: str = "wg0") -> dict:
@@ -176,7 +199,12 @@ async def wg_get_status(iface: str = "wg0") -> dict:
     except RuntimeError:
         return {"peer_connected": False}
     lines = output.splitlines()
-    result = {"peer_connected": False, "latest_handshake_s": 0, "rx_bytes": 0, "tx_bytes": 0}
+    result = {
+        "peer_connected": False,
+        "latest_handshake_s": 0,
+        "rx_bytes": 0,
+        "tx_bytes": 0,
+    }
     for line in lines[1:]:  # first line is interface itself
         parts = line.split("\t")
         if len(parts) >= 6:
@@ -210,7 +238,12 @@ async def _measure_latency(peer_ip: str) -> float | None:
     """ping -c 3 -W 1 <peer_ip> → average RTT in ms, or None on failure."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ping", "-c", "3", "-W", "1", peer_ip,
+            "ping",
+            "-c",
+            "3",
+            "-W",
+            "1",
+            peer_ip,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -218,6 +251,7 @@ async def _measure_latency(peer_ip: str) -> float | None:
         output = stdout.decode()
         # Parse "rtt min/avg/max/mdev = X.XXX/X.XXX/X.XXX/X.XXX ms"
         import re
+
         m = re.search(r"min/avg/max/\w+ = [\d.]+/([\d.]+)/", output)
         if m:
             return float(m.group(1))
@@ -249,12 +283,14 @@ async def wireguard_monitor_loop():
             state["wireguard_allowed_actions"] = _compute_allowed_actions(latency)
             wg_st = await wg_get_status(cfg.get("wireguard_interface", "wg0"))
             state["wireguard_peer_connected"] = wg_st.get("peer_connected", False)
-            await broadcast({
-                "type": "wireguard_status",
-                "latency_ms": latency,
-                "peer_connected": state["wireguard_peer_connected"],
-                "allowed_actions": state["wireguard_allowed_actions"],
-            })
+            await broadcast(
+                {
+                    "type": "wireguard_status",
+                    "latency_ms": latency,
+                    "peer_connected": state["wireguard_peer_connected"],
+                    "allowed_actions": state["wireguard_allowed_actions"],
+                }
+            )
         except Exception as exc:
             logging.getLogger("knx_bus").warning("WireGuard monitor error: %s", exc)
         await asyncio.sleep(30)
@@ -342,7 +378,15 @@ async def _process_telegram(telegram):
         sub = getattr(transcoder, "dpt_sub_number", None)
         if main is not None:
             dpt = f"{main}.{str(sub).zfill(3)}" if sub is not None else str(main)
-        bool_val = decoded if isinstance(decoded, bool) else (decoded.value if isinstance(getattr(decoded, "value", None), bool) else None)
+        bool_val = (
+            decoded
+            if isinstance(decoded, bool)
+            else (
+                decoded.value
+                if isinstance(getattr(decoded, "value", None), bool)
+                else None
+            )
+        )
         if bool_val is not None:
             value = "Ein" if bool_val else "Aus"
         elif isinstance(decoded, float):
@@ -358,7 +402,12 @@ async def _process_telegram(telegram):
                 dpt_estimate = "1.x"
             elif isinstance(payload_val, DPTArray):
                 n = len(payload_val.value)
-                dpt_estimate = {1: "5.x/17.x/20.x", 2: "9.x/7.x/8.x", 3: "10.x/11.x", 4: "14.x/12.x/13.x"}.get(n, f"?({n}B)")
+                dpt_estimate = {
+                    1: "5.x/17.x/20.x",
+                    2: "9.x/7.x/8.x",
+                    3: "10.x/11.x",
+                    4: "14.x/12.x/13.x",
+                }.get(n, f"?({n}B)")
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
@@ -417,7 +466,9 @@ async def knx_connect_loop():
                 xknx.telegram_queue.register_telegram_received_cb(telegram_received_cb)
                 state["connected"] = True
                 retry_delay = 10  # reset on success
-                await broadcast({"type": "status", "connected": True, "ip": ip, "port": port})
+                await broadcast(
+                    {"type": "status", "connected": True, "ip": ip, "port": port}
+                )
                 await asyncio.Event().wait()  # block until cancelled or exception
         except asyncio.CancelledError:
             break  # task was cancelled (e.g. new gateway config) — stop retrying
@@ -451,8 +502,12 @@ def load_log_into_buffer():
                 value = _DPT1_LEGACY.get(value, value)
                 entry = {
                     "type": "telegram",
-                    "ts": ts, "src": src, "device": device,
-                    "ga": ga, "ga_name": ga_name, "value": value,
+                    "ts": ts,
+                    "src": src,
+                    "device": device,
+                    "ga": ga,
+                    "ga_name": ga_name,
+                    "value": value,
                 }
                 state["telegram_buffer"].append(entry)
                 # last seen value per GA
@@ -547,9 +602,13 @@ async def gateway_description():
     if not ip:
         raise HTTPException(status_code=503, detail="Gateway-IP nicht konfiguriert")
     try:
-        result = await asyncio.wait_for(_fetch_gateway_description(ip, port), timeout=5.0)
+        result = await asyncio.wait_for(
+            _fetch_gateway_description(ip, port), timeout=5.0
+        )
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Gateway antwortet nicht (Timeout)") from None
+        raise HTTPException(
+            status_code=504, detail="Gateway antwortet nicht (Timeout)"
+        ) from None
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return result
@@ -558,8 +617,24 @@ async def gateway_description():
 async def _fetch_gateway_description(ip: str, port: int) -> dict:
     """Send KNXnet/IP DESCRIPTION_REQUEST (0x0203) and parse DESCRIPTION_RESPONSE (0x0204)."""
     # KNXnet/IP header: 06 10 0203 000E + HPAI (08 01 00000000 0000)
-    request = bytes([0x06, 0x10, 0x02, 0x03, 0x00, 0x0E,
-                     0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    request = bytes(
+        [
+            0x06,
+            0x10,
+            0x02,
+            0x03,
+            0x00,
+            0x0E,
+            0x08,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
 
@@ -567,9 +642,11 @@ async def _fetch_gateway_description(ip: str, port: int) -> dict:
         def datagram_received(self, data, addr):
             if not future.done():
                 future.set_result(data)
+
         def error_received(self, exc):
             if not future.done():
                 future.set_exception(exc)
+
         def connection_lost(self, exc):
             if not future.done() and exc:
                 future.set_exception(exc)
@@ -601,7 +678,7 @@ def _parse_knxip_description(data: bytes) -> dict:
         dib_type = data[pos + 1]
         if dib_len == 0:
             break
-        block = data[pos:pos + dib_len]
+        block = data[pos : pos + dib_len]
         if dib_type == 0x01 and dib_len >= 54:  # DIB_DEVICE_INFO
             knx_medium = block[2]
             dev_status = block[3]
@@ -611,7 +688,9 @@ def _parse_knxip_description(data: bytes) -> dict:
             device_num = ia_low
             serial = block[8:14].hex(":").upper()
             mac = ":".join(f"{b:02X}" for b in block[20:26])
-            friendly_name = block[26:56].rstrip(b"\x00").decode("latin-1", errors="replace").strip()
+            friendly_name = (
+                block[26:56].rstrip(b"\x00").decode("latin-1", errors="replace").strip()
+            )
             medium_map = {0x01: "TP", 0x02: "PL110", 0x04: "RF", 0x20: "IP"}
             result["device"] = {
                 "friendly_name": friendly_name,
@@ -622,14 +701,26 @@ def _parse_knxip_description(data: bytes) -> dict:
                 "programming_mode": bool(dev_status & 0x01),
             }
         elif dib_type == 0x02:  # DIB_SUPP_SVC_FAMILIES
-            svc_map = {0x02: "Core", 0x03: "Device Management", 0x04: "Tunnelling",
-                       0x05: "Routing", 0x06: "Remote Logging", 0x08: "Remote Configuration",
-                       0x0A: "KNXnet/IP Security"}
+            svc_map = {
+                0x02: "Core",
+                0x03: "Device Management",
+                0x04: "Tunnelling",
+                0x05: "Routing",
+                0x06: "Remote Logging",
+                0x08: "Remote Configuration",
+                0x0A: "KNXnet/IP Security",
+            }
             services = []
             for i in range(2, dib_len - 1, 2):
                 svc_id = block[i]
                 svc_ver = block[i + 1]
-                services.append({"id": svc_id, "name": svc_map.get(svc_id, f"0x{svc_id:02X}"), "version": svc_ver})
+                services.append(
+                    {
+                        "id": svc_id,
+                        "name": svc_map.get(svc_id, f"0x{svc_id:02X}"),
+                        "version": svc_ver,
+                    }
+                )
             result["services"] = services
         pos += dib_len
     return result
@@ -638,12 +729,14 @@ def _parse_knxip_description(data: bytes) -> dict:
 @app.post("/api/gateway")
 async def set_gateway(data: dict):
     cfg = load_config()
-    cfg.update({
-        "gateway_ip": data.get("ip", cfg["gateway_ip"]),
-        "gateway_port": data.get("port", cfg["gateway_port"]),
-        "language": data.get("language", cfg["language"]),
-        "connection_type": data.get("connection_type", cfg["connection_type"]),
-    })
+    cfg.update(
+        {
+            "gateway_ip": data.get("ip", cfg["gateway_ip"]),
+            "gateway_port": data.get("port", cfg["gateway_port"]),
+            "language": data.get("language", cfg["language"]),
+            "connection_type": data.get("connection_type", cfg["connection_type"]),
+        }
+    )
     save_config(cfg)
     state["language"] = cfg["language"]
     await start_connect_task()
@@ -743,11 +836,17 @@ def get_log(lines: int = 500):
             parts = line.strip().split(" | ")
             if len(parts) == 6:
                 ts, src, device, ga, ga_name, value = parts
-                entries.append({
-                    "type": "telegram",
-                    "ts": ts, "src": src, "device": device,
-                    "ga": ga, "ga_name": ga_name, "value": value,
-                })
+                entries.append(
+                    {
+                        "type": "telegram",
+                        "ts": ts,
+                        "src": src,
+                        "device": device,
+                        "ga": ga,
+                        "ga_name": ga_name,
+                        "value": value,
+                    }
+                )
         return entries
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -789,18 +888,22 @@ def export_log_csv():
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     state["ws_clients"].add(ws)
-    await ws.send_json({
-        "type": "status",
-        "connected": state["connected"],
-        "ip": state["gateway_ip"],
-        "port": state["gateway_port"],
-        "language": state["language"],
-    })
+    await ws.send_json(
+        {
+            "type": "status",
+            "connected": state["connected"],
+            "ip": state["gateway_ip"],
+            "port": state["gateway_port"],
+            "language": state["language"],
+        }
+    )
     await ws.send_json({"type": "snapshot", "values": state["current_values"]})
-    await ws.send_json({
-        "type": "history",
-        "entries": list(reversed(list(state["telegram_buffer"]))),  # newest first
-    })
+    await ws.send_json(
+        {
+            "type": "history",
+            "entries": list(reversed(list(state["telegram_buffer"]))),  # newest first
+        }
+    )
     try:
         while True:
             await ws.receive_text()
@@ -809,6 +912,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 # ── Remote Gateway ────────────────────────────────────────────────────────────
+
 
 def _make_telegram_from_proxy(msg: dict) -> Telegram:
     apci_map = {
@@ -849,13 +953,15 @@ async def remote_gateway_endpoint(ws: WebSocket, token: str = Query(...)):
             if msg["type"] == "status":
                 state["remote_gateway_connected"] = msg.get("connected", False)
                 state["connected"] = state["remote_gateway_connected"]
-                await broadcast({
-                    "type": "status",
-                    "connected": state["connected"],
-                    "ip": "remote",
-                    "port": 0,
-                    "language": state["language"],
-                })
+                await broadcast(
+                    {
+                        "type": "status",
+                        "connected": state["connected"],
+                        "ip": "remote",
+                        "port": 0,
+                        "language": state["language"],
+                    }
+                )
             elif msg["type"] == "telegram":
                 telegram = _make_telegram_from_proxy(msg)
                 asyncio.create_task(_process_telegram(telegram))
@@ -870,14 +976,21 @@ async def remote_gateway_endpoint(ws: WebSocket, token: str = Query(...)):
 
 # ── GA Write / Read ───────────────────────────────────────────────────────────
 
+
 @app.post("/api/ga/write")
 async def ga_write(data: dict):
     ga_str = data.get("ga", "")
     value_str = str(data.get("value", ""))
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
-    if state.get("wireguard_enabled") and "ga_rw" not in state["wireguard_allowed_actions"]:
-        raise HTTPException(status_code=503, detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Schreiben nicht erlaubt")
+    if (
+        state.get("wireguard_enabled")
+        and "ga_rw" not in state["wireguard_allowed_actions"]
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Schreiben nicht erlaubt",
+        )
     dpt_info = state["ga_dpt_map"].get(ga_str)
     if not dpt_info:
         raise HTTPException(status_code=422, detail="DPT für diese GA nicht bekannt")
@@ -887,7 +1000,14 @@ async def ga_write(data: dict):
             raise ValueError(f"Unbekannter DPT: {dpt_info}")
         main = dpt_info.get("main")
         if main == 1:
-            bool_val = value_str.strip().lower() in ("1", "true", "ein", "an", "on", "yes")
+            bool_val = value_str.strip().lower() in (
+                "1",
+                "true",
+                "ein",
+                "an",
+                "on",
+                "yes",
+            )
             typed_value = bool_val
             display_value = "Ein" if bool_val else "Aus"
         else:
@@ -896,20 +1016,30 @@ async def ga_write(data: dict):
             display_value = f"{typed_value:.2f}{' ' + unit if unit else ''}"
         payload = GroupValueWrite(transcoder.to_knx(typed_value))
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Wert konnte nicht kodiert werden: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Wert konnte nicht kodiert werden: {exc}"
+        ) from exc
 
     telegram = Telegram(destination_address=GroupAddress(ga_str), payload=payload)
     if state.get("connection_type") == "remote_gateway":
         gw_ws = state.get("remote_gateway_ws")
         if gw_ws is None:
-            raise HTTPException(status_code=503, detail="Remote-Gateway nicht verbunden")
+            raise HTTPException(
+                status_code=503, detail="Remote-Gateway nicht verbunden"
+            )
         raw_payload = payload.value
         if isinstance(raw_payload, DPTBinary):
             p_type, p_val = "binary", raw_payload.value
         else:
             p_type, p_val = "array", list(raw_payload.value)
-        await gw_ws.send_json({"type": "write", "ga": ga_str,
-                               "payload_type": p_type, "payload_value": p_val})
+        await gw_ws.send_json(
+            {
+                "type": "write",
+                "ga": ga_str,
+                "payload_type": p_type,
+                "payload_value": p_val,
+            }
+        )
     else:
         await state["xknx"].telegrams.put(telegram)
 
@@ -923,7 +1053,11 @@ async def ga_write(data: dict):
                 break
     dpt_main = dpt_info.get("main")
     dpt_sub = dpt_info.get("sub")
-    dpt = f"{dpt_main}.{str(dpt_sub).zfill(3)}" if dpt_main is not None and dpt_sub is not None else str(dpt_main or "")
+    dpt = (
+        f"{dpt_main}.{str(dpt_sub).zfill(3)}"
+        if dpt_main is not None and dpt_sub is not None
+        else str(dpt_main or "")
+    )
     entry = {
         "type": "telegram",
         "ts": ts,
@@ -946,15 +1080,25 @@ async def ga_read(data: dict):
     ga_str = data.get("ga", "")
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
-    if state.get("wireguard_enabled") and "ga_rw" not in state["wireguard_allowed_actions"]:
-        raise HTTPException(status_code=503, detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Lesen nicht erlaubt")
+    if (
+        state.get("wireguard_enabled")
+        and "ga_rw" not in state["wireguard_allowed_actions"]
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Lesen nicht erlaubt",
+        )
     if state.get("connection_type") == "remote_gateway":
         gw_ws = state.get("remote_gateway_ws")
         if gw_ws is None:
-            raise HTTPException(status_code=503, detail="Remote-Gateway nicht verbunden")
+            raise HTTPException(
+                status_code=503, detail="Remote-Gateway nicht verbunden"
+            )
         await gw_ws.send_json({"type": "read", "ga": ga_str})
     else:
-        telegram = Telegram(destination_address=GroupAddress(ga_str), payload=GroupValueRead())
+        telegram = Telegram(
+            destination_address=GroupAddress(ga_str), payload=GroupValueRead()
+        )
         await state["xknx"].telegrams.put(telegram)
     return {"ok": True}
 
@@ -963,8 +1107,14 @@ async def ga_read(data: dict):
 async def ga_read_all():
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
-    if state.get("wireguard_enabled") and "ga_rw" not in state["wireguard_allowed_actions"]:
-        raise HTTPException(status_code=503, detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Lesen nicht erlaubt")
+    if (
+        state.get("wireguard_enabled")
+        and "ga_rw" not in state["wireguard_allowed_actions"]
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Latenz zu hoch ({state['wireguard_latency_ms']} ms) — GA-Lesen nicht erlaubt",
+        )
     gas = list(state["ga_dpt_map"].keys())
 
     async def _send_all():
@@ -977,15 +1127,20 @@ async def ga_read_all():
                 await asyncio.sleep(0.05)
         else:
             for ga_str in gas:
-                tg = Telegram(destination_address=GroupAddress(ga_str), payload=GroupValueRead())
+                tg = Telegram(
+                    destination_address=GroupAddress(ga_str), payload=GroupValueRead()
+                )
                 await state["xknx"].telegrams.put(tg)
-                await asyncio.sleep(0.05)  # 50 ms between requests to avoid flooding the bus
+                await asyncio.sleep(
+                    0.05
+                )  # 50 ms between requests to avoid flooding the bus
 
     asyncio.create_task(_send_all())
     return {"ok": True, "count": len(gas)}
 
 
 # ── Bus Scan ───────────────────────────────────────────────────────────────────
+
 
 @app.post("/api/ga/scan")
 async def ga_scan(data: dict):
@@ -1007,7 +1162,9 @@ async def ga_scan(data: dict):
         sm, sk, ss = _parse_ga(start)
         em, ek, es = _parse_ga(end)
     except Exception:
-        raise HTTPException(status_code=422, detail="Ungültiges GA-Format (erwartet: main/middle/sub)") from None
+        raise HTTPException(
+            status_code=422, detail="Ungültiges GA-Format (erwartet: main/middle/sub)"
+        ) from None
 
     gas = []
     for m in range(sm, em + 1):
@@ -1024,7 +1181,9 @@ async def ga_scan(data: dict):
                 gas.append(f"{m}/{k}/{s}")
 
     if len(gas) > 32768:
-        raise HTTPException(status_code=422, detail=f"Bereich zu groß ({len(gas)} GAs, max 32768)")
+        raise HTTPException(
+            status_code=422, detail=f"Bereich zu groß ({len(gas)} GAs, max 32768)"
+        )
 
     state["ga_scan_running"] = True
     state["ga_scan_cancel"] = False
@@ -1036,15 +1195,24 @@ async def ga_scan(data: dict):
                     break
                 if not state["connected"]:
                     break
-                tg = Telegram(destination_address=GroupAddress(ga_str), payload=GroupValueRead())
+                tg = Telegram(
+                    destination_address=GroupAddress(ga_str), payload=GroupValueRead()
+                )
                 await state["xknx"].telegrams.put(tg)
                 if i % 20 == 0:
-                    await broadcast({"type": "scan_ga_progress", "done": i, "total": len(gas)})
+                    await broadcast(
+                        {"type": "scan_ga_progress", "done": i, "total": len(gas)}
+                    )
                 await asyncio.sleep(delay_ms / 1000)
         finally:
             state["ga_scan_running"] = False
-            await broadcast({"type": "scan_ga_complete", "total": len(gas),
-                             "cancelled": state.get("ga_scan_cancel", False)})
+            await broadcast(
+                {
+                    "type": "scan_ga_complete",
+                    "total": len(gas),
+                    "cancelled": state.get("ga_scan_cancel", False),
+                }
+            )
             state["ga_scan_cancel"] = False
 
     asyncio.create_task(_run())
@@ -1063,13 +1231,15 @@ async def bus_scan(data: dict):
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
     if state.get("connection_type") == "remote_gateway":
-        raise HTTPException(status_code=503, detail="PA-Scan nur mit lokaler Gateway-Verbindung")
+        raise HTTPException(
+            status_code=503, detail="PA-Scan nur mit lokaler Gateway-Verbindung"
+        )
     if state.get("pa_scan_running"):
         raise HTTPException(status_code=409, detail="PA-Scan läuft bereits")
 
-    area = data.get("area")     # None = alle Bereiche 1-15
-    line = data.get("line")     # None = alle Linien 1-15
-    device = data.get("device") # None = alle Geräte 1-255
+    area = data.get("area")  # None = alle Bereiche 1-15
+    line = data.get("line")  # None = alle Linien 1-15
+    device = data.get("device")  # None = alle Geräte 1-255
     timeout_ms = max(500, min(5000, int(data.get("timeout_ms", 1500))))
 
     areas = [area] if area is not None else list(range(1, 16))
@@ -1086,10 +1256,11 @@ async def bus_scan(data: dict):
 
     async def _check(addr: str) -> bool:
         from xknx.management.procedures import nm_individual_address_check
+
         try:
             return await asyncio.wait_for(
                 nm_individual_address_check(state["xknx"], IndividualAddress(addr)),
-                timeout=timeout_ms / 1000
+                timeout=timeout_ms / 1000,
             )
         except (asyncio.TimeoutError, Exception):
             return False
@@ -1105,12 +1276,19 @@ async def bus_scan(data: dict):
                     found.append(addr)
                     await broadcast({"type": "scan_pa_found", "address": addr})
                 if i % 5 == 0:
-                    await broadcast({"type": "scan_pa_progress", "done": i, "total": len(addresses)})
+                    await broadcast(
+                        {"type": "scan_pa_progress", "done": i, "total": len(addresses)}
+                    )
         finally:
             state["pa_scan_running"] = False
-            await broadcast({"type": "scan_pa_complete", "found": found,
-                             "total": len(addresses),
-                             "cancelled": state.get("pa_scan_cancel", False)})
+            await broadcast(
+                {
+                    "type": "scan_pa_complete",
+                    "found": found,
+                    "total": len(addresses),
+                    "cancelled": state.get("pa_scan_cancel", False),
+                }
+            )
             state["pa_scan_cancel"] = False
 
     asyncio.create_task(_run())
@@ -1129,8 +1307,11 @@ async def bus_programming_mode(timeout: float = 3.0):
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
     if state.get("connection_type") == "remote_gateway":
-        raise HTTPException(status_code=503, detail="Nur mit lokaler Gateway-Verbindung")
+        raise HTTPException(
+            status_code=503, detail="Nur mit lokaler Gateway-Verbindung"
+        )
     from xknx.management.procedures import nm_individual_address_read
+
     try:
         addresses = await asyncio.wait_for(
             nm_individual_address_read(state["xknx"], timeout=timeout),
@@ -1147,7 +1328,10 @@ async def device_properties(addr: str):
     if not state["connected"]:
         raise HTTPException(status_code=503, detail="Kein KNX-Gateway verbunden")
     if state.get("connection_type") == "remote_gateway":
-        raise HTTPException(status_code=503, detail="Device-Properties nur mit lokaler Gateway-Verbindung")
+        raise HTTPException(
+            status_code=503,
+            detail="Device-Properties nur mit lokaler Gateway-Verbindung",
+        )
 
     from xknx.telegram import apci as xknx_apci
 
@@ -1165,7 +1349,9 @@ async def device_properties(addr: str):
     try:
         ia = IndividualAddress(addr)
     except Exception:
-        raise HTTPException(status_code=422, detail=f"Ungültige physische Adresse: {addr}") from None
+        raise HTTPException(
+            status_code=422, detail=f"Ungültige physische Adresse: {addr}"
+        ) from None
 
     try:
         async with state["xknx"].management.connection(ia) as conn:
@@ -1178,7 +1364,11 @@ async def device_properties(addr: str):
                     ),
                     timeout=4.0,
                 )
-                descriptor = desc_resp.payload.value if hasattr(desc_resp.payload, "value") else None
+                descriptor = (
+                    desc_resp.payload.value
+                    if hasattr(desc_resp.payload, "value")
+                    else None
+                )
             except Exception:
                 descriptor = None
 
@@ -1200,7 +1390,9 @@ async def device_properties(addr: str):
                 except Exception:
                     props[name] = None
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Verbindung zu {addr} fehlgeschlagen: {exc}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"Verbindung zu {addr} fehlgeschlagen: {exc}"
+        ) from exc
 
     # Decode manufacturer ID (2 bytes big-endian, KNXA manufacturer list)
     mfr_raw = props.get("PID_MANUFACTURER_ID")
@@ -1215,6 +1407,7 @@ async def device_properties(addr: str):
 
 
 # ── WireGuard API ─────────────────────────────────────────────────────────────
+
 
 @app.get("/api/wireguard/status")
 async def wg_status():
@@ -1238,14 +1431,25 @@ async def wg_status():
 @app.get("/api/wireguard/config")
 def wg_config():
     cfg = load_config()
-    return {k: v for k, v in cfg.items() if k.startswith("wireguard_") and "private" not in k.lower()}
+    return {
+        k: v
+        for k, v in cfg.items()
+        if k.startswith("wireguard_") and "private" not in k.lower()
+    }
 
 
 @app.post("/api/wireguard/setup")
 async def wg_setup_endpoint(data: dict):
     cfg = load_config()
     # Update WG config fields from request
-    for field in ("server_ip", "peer_ip", "listen_port", "ets_port", "knx_ip", "knx_port"):
+    for field in (
+        "server_ip",
+        "peer_ip",
+        "listen_port",
+        "ets_port",
+        "knx_ip",
+        "knx_port",
+    ):
         key = f"wireguard_{field}"
         if field in data:
             cfg[key] = data[field]
@@ -1256,14 +1460,19 @@ async def wg_setup_endpoint(data: dict):
     try:
         server_pubkey = await wg_setup(cfg)
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=f"WireGuard-Setup fehlgeschlagen: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"WireGuard-Setup fehlgeschlagen: {exc}"
+        ) from exc
 
     # Persist server public key for peer-config download
     cfg["wireguard_server_public_key"] = server_pubkey
     save_config(cfg)
 
     # Start latency monitor if not running
-    if not state.get("wireguard_latency_task") or state["wireguard_latency_task"].done():
+    if (
+        not state.get("wireguard_latency_task")
+        or state["wireguard_latency_task"].done()
+    ):
         state["wireguard_latency_task"] = asyncio.create_task(wireguard_monitor_loop())
 
     return {"ok": True, "server_public_key": server_pubkey}
@@ -1280,7 +1489,9 @@ async def wg_peer_endpoint(data: dict):
     try:
         await wg_add_peer(public_key, cfg)
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=f"Peer konnte nicht hinzugefügt werden: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Peer konnte nicht hinzugefügt werden: {exc}"
+        ) from exc
     return {"ok": True}
 
 
@@ -1307,6 +1518,7 @@ def wg_peer_config():
         f"PersistentKeepalive = 25\n"
     )
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(
         content=config_text,
         headers={"Content-Disposition": f'attachment; filename="{iface}_client.conf"'},
@@ -1338,13 +1550,18 @@ async def wg_latency_test():
     latency = await _measure_latency(peer_ip)
     state["wireguard_latency_ms"] = latency
     state["wireguard_allowed_actions"] = _compute_allowed_actions(latency)
-    await broadcast({
-        "type": "wireguard_status",
+    await broadcast(
+        {
+            "type": "wireguard_status",
+            "latency_ms": latency,
+            "peer_connected": state["wireguard_peer_connected"],
+            "allowed_actions": state["wireguard_allowed_actions"],
+        }
+    )
+    return {
         "latency_ms": latency,
-        "peer_connected": state["wireguard_peer_connected"],
         "allowed_actions": state["wireguard_allowed_actions"],
-    })
-    return {"latency_ms": latency, "allowed_actions": state["wireguard_allowed_actions"]}
+    }
 
 
 @app.delete("/api/wireguard/setup")
@@ -1352,7 +1569,10 @@ async def wg_teardown():
     cfg = load_config()
     iface = cfg.get("wireguard_interface", "wg0")
     # Stop latency monitor
-    if state.get("wireguard_latency_task") and not state["wireguard_latency_task"].done():
+    if (
+        state.get("wireguard_latency_task")
+        and not state["wireguard_latency_task"].done()
+    ):
         state["wireguard_latency_task"].cancel()
         state["wireguard_latency_task"] = None
     # Remove ETS port forward if active
@@ -1396,23 +1616,34 @@ def _build_project_summary(project_data: dict) -> str:
         lines.append(f"  Bereich {area_id}: {area.get('name', '')}")
         for line_id, line in area.get("lines", {}).items():
             devs = line.get("devices", [])
-            lines.append(f"    Linie {area_id}.{line_id}: {line.get('name', '')} ({len(devs)} Geräte)")
+            lines.append(
+                f"    Linie {area_id}.{line_id}: {line.get('name', '')} ({len(devs)} Geräte)"
+            )
 
     lines.append("\n## Geräte")
     for addr, dev in project_data.get("devices", {}).items():
-        lines.append(f"  {addr}: {dev.get('name', '')} — {dev.get('manufacturer_name', '')} {dev.get('order_number', '')}")
+        lines.append(
+            f"  {addr}: {dev.get('name', '')} — {dev.get('manufacturer_name', '')} {dev.get('order_number', '')}"
+        )
 
     lines.append("\n## Gruppenadressen")
     for _, ga in project_data.get("group_addresses", {}).items():
         dpt = ga.get("dpt")
-        dpt_str = f" [DPT {dpt['main']}.{str(dpt.get('sub') or 0).zfill(3)}]" if dpt and dpt.get("main") else ""
+        dpt_str = (
+            f" [DPT {dpt['main']}.{str(dpt.get('sub') or 0).zfill(3)}]"
+            if dpt and dpt.get("main")
+            else ""
+        )
         lines.append(f"  {ga.get('address', '')}: {ga.get('name', '')}{dpt_str}")
 
     funcs = project_data.get("functions", {})
     if funcs:
         lines.append("\n## Funktionen")
         for _, func in funcs.items():
-            gas = [v.get("address", "") for v in (func.get("group_addresses") or {}).values()]
+            gas = [
+                v.get("address", "")
+                for v in (func.get("group_addresses") or {}).values()
+            ]
             lines.append(f"  {func.get('name', '')}: {', '.join(gas)}")
 
     return "\n".join(lines)
@@ -1444,10 +1675,18 @@ async def llm_analyze(data: dict):
     cfg = load_config()
     api_key = cfg.get("openrouter_api_key", "")
     model = cfg.get("llm_model", LLM_DEFAULT_MODEL)
-    question = data.get("question", "").strip() or "Erkläre das Projekt, seine Topologie und die wichtigsten Gruppenadressen."
+    question = (
+        data.get("question", "").strip()
+        or "Erkläre das Projekt, seine Topologie und die wichtigsten Gruppenadressen."
+    )
+    history = data.get(
+        "history", []
+    )  # List of {role: "user"|"assistant", content: str}
 
     if not api_key:
-        raise HTTPException(status_code=400, detail="OpenRouter API-Key nicht konfiguriert")
+        raise HTTPException(
+            status_code=400, detail="OpenRouter API-Key nicht konfiguriert"
+        )
     if not state["project_data"]:
         raise HTTPException(status_code=400, detail="Kein Projekt geladen")
 
@@ -1461,11 +1700,29 @@ async def llm_analyze(data: dict):
                 "Antworte auf Deutsch, präzise und strukturiert."
             ),
         },
-        {
-            "role": "user",
-            "content": f"Projektdaten:\n\n{summary}\n\nFrage: {question}",
-        },
     ]
+
+    # Add project summary context only for the first message
+    if not history:
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Projektdaten:\n\n{summary}\n\nFrage: {question}",
+            }
+        )
+    else:
+        # Add project summary as context, then conversation history
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Projektdaten:\n\n{summary}\n\nBeantworte Fragen zu diesem Projekt.",
+            }
+        )
+        # Add conversation history
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        # Add current question
+        messages.append({"role": "user", "content": question})
 
     async def stream_llm():
         async with httpx.AsyncClient(timeout=60) as client:
@@ -1498,19 +1755,27 @@ async def llm_compare(data: dict):
     name_a = data.get("name_a", "Projekt A")
     name_b = data.get("name_b", "Projekt B")
     if not api_key:
-        raise HTTPException(status_code=400, detail="OpenRouter API-Key nicht konfiguriert")
+        raise HTTPException(
+            status_code=400, detail="OpenRouter API-Key nicht konfiguriert"
+        )
     if not diff_text:
         raise HTTPException(status_code=400, detail="Kein Diff-Text übergeben")
     messages = [
-        {"role": "system", "content": (
-            "Du bist ein KNX-Experte. Analysiere die Unterschiede zwischen zwei KNX-Projekten "
-            "und bewerte deren Auswirkungen. Hebe kritische Änderungen (DPT-Wechsel) besonders "
-            "hervor. Antworte auf Deutsch, präzise und strukturiert."
-        )},
-        {"role": "user", "content": (
-            f"Vergleiche: Projekt A: {name_a} / Projekt B: {name_b}\n\n{diff_text}\n\n"
-            "Erkläre die Auswirkungen, hebe kritische Änderungen hervor, nenne nötige Anpassungen."
-        )},
+        {
+            "role": "system",
+            "content": (
+                "Du bist ein KNX-Experte. Analysiere die Unterschiede zwischen zwei KNX-Projekten "
+                "und bewerte deren Auswirkungen. Hebe kritische Änderungen (DPT-Wechsel) besonders "
+                "hervor. Antworte auf Deutsch, präzise und strukturiert."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Vergleiche: Projekt A: {name_a} / Projekt B: {name_b}\n\n{diff_text}\n\n"
+                "Erkläre die Auswirkungen, hebe kritische Änderungen hervor, nenne nötige Anpassungen."
+            ),
+        },
     ]
 
     async def stream_llm():
@@ -1518,7 +1783,10 @@ async def llm_compare(data: dict):
             async with client.stream(
                 "POST",
                 OPENROUTER_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json={"model": model, "messages": messages, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
@@ -1535,6 +1803,7 @@ async def llm_compare(data: dict):
 def _parse_ets_certificate(raw: str) -> dict:
     """Parse ETS Cloud License certificate format into a dict."""
     import re
+
     fields = {}
     for m in re.finditer(r'(\w+)=(?:"([^"]*)"|([\w+/=]+))', raw):
         fields[m.group(1)] = m.group(2) if m.group(2) is not None else m.group(3)
@@ -1546,6 +1815,7 @@ def _extract_security_data(tmp_path: str, password: str, project: dict) -> dict:
     import re
     import xml.etree.ElementTree as ET
     import zipfile
+
     result: dict = {"devices": [], "ga_keys": {}, "ets_certificates": []}
     try:
         with knxproj_extract(tmp_path, password or None) as content:
@@ -1579,28 +1849,41 @@ def _extract_security_data(tmp_path: str, password: str, project: dict) -> dict:
                     for bi in dev.iter(f"{{{ns}}}BusInterface"):
                         pwd = bi.get("Password")
                         if pwd:
-                            bus_ifaces.append({"ref_id": bi.get("RefId", ""), "password": pwd})
+                            bus_ifaces.append(
+                                {"ref_id": bi.get("RefId", ""), "password": pwd}
+                            )
                     tool_key = sec.get("ToolKey")
                     device_auth_code = sec.get("DeviceAuthenticationCode")
                     device_mgmt_password = sec.get("DeviceManagementPassword")
                     sequence_number = sec.get("SequenceNumber")
                     # Skip devices with only a default SequenceNumber="0" and no actual keys/passwords
                     # (ETS writes <Security SequenceNumber="0"/> to all devices even in non-secure projects)
-                    has_keys = tool_key or device_auth_code or device_mgmt_password or bus_ifaces
+                    has_keys = (
+                        tool_key
+                        or device_auth_code
+                        or device_mgmt_password
+                        or bus_ifaces
+                    )
                     has_nonzero_seq = sequence_number not in (None, "0")
                     if not has_keys and not has_nonzero_seq:
                         continue
-                    result["devices"].append({
-                        "address": ia,
-                        "name": dev_info.get("name") or dev.get("Name") or "",
-                        "ip_address": ip_cfg.get("IPAddress") if ip_cfg is not None else None,
-                        "mac_address": ip_cfg.get("MACAddress") if ip_cfg is not None else None,
-                        "tool_key": tool_key,
-                        "device_auth_code": device_auth_code,
-                        "device_mgmt_password": device_mgmt_password,
-                        "sequence_number": sequence_number,
-                        "bus_interfaces": bus_ifaces or None,
-                    })
+                    result["devices"].append(
+                        {
+                            "address": ia,
+                            "name": dev_info.get("name") or dev.get("Name") or "",
+                            "ip_address": ip_cfg.get("IPAddress")
+                            if ip_cfg is not None
+                            else None,
+                            "mac_address": ip_cfg.get("MACAddress")
+                            if ip_cfg is not None
+                            else None,
+                            "tool_key": tool_key,
+                            "device_auth_code": device_auth_code,
+                            "device_mgmt_password": device_mgmt_password,
+                            "sequence_number": sequence_number,
+                            "bus_interfaces": bus_ifaces or None,
+                        }
+                    )
 
         # ── GA keys ──────────────────────────────────────────────────────────
         for ga_el in root.iter(f"{{{ns}}}GroupAddress"):

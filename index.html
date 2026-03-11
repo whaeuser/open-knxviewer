@@ -6,9 +6,27 @@
   <title>Open-KNXViewer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
     .tab-active { @apply border-b-2 border-blue-600 text-blue-600; }
+    /* Markdown rendering styles */
+    .markdown-content h1 { font-size: 1.5rem; font-weight: bold; margin: 1rem 0 0.5rem; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: bold; margin: 0.875rem 0 0.5rem; }
+    .markdown-content h3 { font-size: 1.125rem; font-weight: bold; margin: 0.75rem 0 0.5rem; }
+    .markdown-content p { margin: 0.5rem 0; }
+    .markdown-content ul { list-style-type: disc; margin: 0.5rem 0; padding-left: 1.5rem; }
+    .markdown-content ol { list-style-type: decimal; margin: 0.5rem 0; padding-left: 1.5rem; }
+    .markdown-content li { margin: 0.25rem 0; }
+    .markdown-content code { background-color: #f3f4f6; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.875rem; }
+    .markdown-content pre { background-color: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
+    .markdown-content pre code { background-color: transparent; padding: 0; }
+    .markdown-content blockquote { border-left: 4px solid #e5e7eb; padding-left: 1rem; margin: 0.75rem 0; color: #6b7280; }
+    .markdown-content a { color: #2563eb; text-decoration: underline; }
+    .markdown-content a:hover { color: #1d4ed8; }
+    .markdown-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+    .markdown-content th, .markdown-content td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
+    .markdown-content th { background-color: #f9fafb; font-weight: 600; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen" x-data="app()" x-cloak>
@@ -1280,42 +1298,105 @@
     <!-- KI-ANALYSE TAB -->
     <div x-show="activeTab === 'ki_analyse'">
       <div class="bg-white rounded-xl shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">KI-Analyse</h2>
-        <div class="flex gap-2 mb-4">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-semibold text-gray-700">KI-Analyse</h2>
+          <button x-show="llmMessages.length > 0" @click="newLlmChat()"
+                  class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Neue Konversation
+          </button>
+        </div>
+        
+        <!-- Chat History -->
+        <div class="space-y-4 mb-4 max-h-96 overflow-y-auto">
+          <template x-for="(msg, index) in llmMessages" :key="index">
+            <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+              <div :class="msg.role === 'user' 
+                ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-3xl' 
+                : 'bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm px-4 py-2 max-w-3xl border border-gray-200 markdown-content'"
+                   :x-text="msg.role === 'user' ? msg.content : null"
+                   :x-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : null"></div>
+            </div>
+          </template>
+          
+          <!-- Current streaming response -->
+          <div x-show="llmLoading || llmResponse" class="flex justify-start">
+            <div class="bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm px-4 py-2 max-w-3xl border border-gray-200 markdown-content">
+              <div x-show="llmReasoning && !llmResponse" class="text-sm text-gray-500 italic">Denke nach…</div>
+              <div x-show="llmResponse" class="text-sm" x-html="renderMarkdown(llmResponse)"></div>
+              <div x-show="llmLoading && llmResponse" class="inline-flex gap-1 mt-1">
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="mb-3">
+          <p class="text-xs text-gray-500 mb-2">Vorschläge:</p>
+          <div class="flex flex-wrap gap-2">
+            <button @click="setLlmQuestion('Erkläre die Topologie des Projekts')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              🏗️ Topologie erklären
+            </button>
+            <button @click="setLlmQuestion('Analysiere die Gruppenadressen und deren Verwendung')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              🔗 Gruppenadressen analysieren
+            </button>
+            <button @click="setLlmQuestion('Optimiere das Projekt: Wo gibt es Verbesserungspotenzial?')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              ⚡ Projekt optimieren
+            </button>
+            <button @click="setLlmQuestion('Erstelle eine Zusammenfassung für die Dokumentation')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              📝 Dokumentation erstellen
+            </button>
+            <button @click="setLlmQuestion('Welche Sicherheitsrisiken gibt es im Projekt?')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              🔒 Sicherheit prüfen
+            </button>
+            <button @click="setLlmQuestion('Erstelle eine Checkliste für die Inbetriebnahme')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              ✅ Inbetriebnahme-Checkliste
+            </button>
+            <button @click="setLlmQuestion('Welche Geräte sind redundant oder fehlen möglicherweise?')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              🔍 Redundanzen finden
+            </button>
+            <button @click="setLlmQuestion('Erkläre die Kommunikationsobjekte der wichtigsten Geräte')"
+                    class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors">
+              📡 Kommunikationsobjekte
+            </button>
+          </div>
+        </div>
+        
+        <!-- Input Area -->
+        <div class="flex gap-2">
           <input x-model="llmQuestion" type="text"
-                 placeholder="Frage stellen, z.B. &quot;Erkläre die Topologie&quot; …"
+                 :placeholder="llmMessages.length === 0 
+                    ? 'Frage stellen, z.B. &quot;Erkläre die Topologie&quot; …' 
+                    : 'Folgefrage stellen…'"
                  @keydown.enter="analyzeLlm()"
                  class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-          <button @click="analyzeLlm()" :disabled="llmLoading"
+          <button @click="analyzeLlm()" :disabled="llmLoading || !llmQuestion.trim()"
                   class="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            <span x-show="!llmLoading">Analysieren</span>
+            <span x-show="!llmLoading">Senden</span>
             <span x-show="llmLoading">…</span>
           </button>
         </div>
-        <p x-show="llmError" x-text="llmError" class="mb-3 text-sm text-red-600"></p>
-        <!-- Export button — only shown when a response is available -->
-        <div x-show="llmResponse" class="flex justify-end mb-3">
+        <p x-show="llmError" x-text="llmError" class="mt-2 text-sm text-red-600"></p>
+        
+        <!-- Export button -->
+        <div x-show="llmMessages.length > 0 && !llmLoading" class="flex justify-end mt-3">
           <button @click="exportLlm()"
-                  class="text-sm text-gray-600 hover:text-gray-900">↓ Markdown</button>
+                  class="text-sm text-gray-600 hover:text-gray-900">↓ Markdown exportieren</button>
         </div>
-        <!-- Reasoning (Denkprozess) — collapsible, streams while model thinks -->
-        <details x-show="llmReasoning" class="mb-3">
-          <summary class="text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">
-            Denkprozess anzeigen
-          </summary>
-          <div class="mt-2 whitespace-pre-wrap text-xs text-gray-400 bg-gray-50 rounded p-3 border border-gray-100 max-h-48 overflow-y-auto leading-relaxed"
-               x-text="llmReasoning"></div>
-        </details>
-        <!-- Main response -->
-        <div x-show="llmResponse"
-             class="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 rounded-lg p-4 leading-relaxed border border-gray-200"
-             x-text="llmResponse"></div>
-        <!-- Placeholder while reasoning is streaming but no content yet -->
-        <p x-show="llmLoading && llmReasoning && !llmResponse" class="text-sm text-gray-400 italic">
-          Antwort wird formuliert …
-        </p>
-        <p x-show="!llmResponse && !llmLoading && !llmReasoning" class="text-sm text-gray-400">
-          Stelle eine Frage zum Projekt oder klicke auf „Analysieren" für eine automatische Übersicht.
+        
+        <!-- Empty state -->
+        <p x-show="llmMessages.length === 0 && !llmLoading && !llmError" class="text-sm text-gray-400 mt-4">
+          Stelle eine Frage zum Projekt. Die KI analysiert die Projektstruktur und beantwortet deine Fragen.
         </p>
       </div>
     </div>
@@ -1462,8 +1543,8 @@
                        x-text="compareLlmReasoning"></div>
                 </details>
                 <div x-show="compareLlmResponse"
-                     class="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 rounded-lg p-4 leading-relaxed border border-gray-200"
-                     x-text="compareLlmResponse"></div>
+                     class="text-sm text-gray-800 bg-gray-50 rounded-lg p-4 leading-relaxed border border-gray-200 markdown-content"
+                     x-html="renderMarkdown(compareLlmResponse)"></div>
                 <p x-show="compareLlmLoading && compareLlmReasoning && !compareLlmResponse" class="text-sm text-gray-400 italic">
                   Antwort wird formuliert …
                 </p>
@@ -1553,6 +1634,7 @@ function app() {
     llmReasoning: '',
     llmLoading: false,
     llmError: '',
+    llmMessages: [],  // Chat history: [{role: 'user'|'assistant', content: string}]
 
     // Projektvergleich
     compareSlug: null,
@@ -1632,311 +1714,13 @@ function app() {
         try {
           const res = await fetch('/api/last-project/data');
           if (res.ok) {
-            this.project = await res.json();
-            this.phase = 'result';
-          } else {
-            this.loadLastProjectInfo();
-          }
-        } catch (_) { this.loadLastProjectInfo(); }
-      } else {
-        try {
-          const res = await fetch('/api/demo/available');
-          if (res.ok) this.demoAvailable = (await res.json()).available;
-        } catch (_) {}
-      }
-      this.initializing = false;
-    },
-
-    async loadAnnotations() {
-      try {
-        const res = await fetch('/api/annotations');
-        if (res.ok) this.annotations = await res.json();
-      } catch (_) {}
-    },
-
-    async loadGatewayInfo() {
-      try {
-        const res = await fetch('/api/gateway');
-        if (res.ok) {
-          const cfg = await res.json();
-          this.connectionType = cfg.connection_type || 'local';
-          this.remoteGatewayToken = cfg.remote_gateway_token || '';
-        }
-      } catch (_) {}
-      try {
-        const wgRes = await fetch('/api/wireguard/status');
-        if (wgRes.ok) {
-          const wg = await wgRes.json();
-          this.wireguardEnabled = wg.enabled || false;
-          this.wireguardLatencyMs = wg.latency_ms ?? null;
-          this.wireguardPeerConnected = wg.peer_connected || false;
-          this.wireguardAllowedActions = wg.allowed_actions || ['monitor'];
-          this.wireguardEtsPortActive = wg.ets_port_active || false;
-        }
-        const wgCfgRes = await fetch('/api/wireguard/config');
-        if (wgCfgRes.ok) {
-          const wgCfg = await wgCfgRes.json();
-          this.wgSetupData.server_ip = wgCfg.wireguard_server_ip || '10.100.0.1';
-          this.wgSetupData.peer_ip = wgCfg.wireguard_peer_ip || '10.100.0.2';
-          this.wgSetupData.listen_port = wgCfg.wireguard_listen_port || 51820;
-          this.wgSetupData.ets_port = wgCfg.wireguard_ets_port || 13671;
-          this.wgSetupData.knx_ip = wgCfg.wireguard_knx_ip || '';
-          this.wgSetupData.knx_port = wgCfg.wireguard_knx_port || 3671;
-        }
-      } catch (_) {}
-    },
-
-    wgLatencyColor() {
-      if (this.wireguardLatencyMs === null) return 'bg-red-500';
-      if (this.wireguardLatencyMs < 50) return 'bg-green-500';
-      if (this.wireguardLatencyMs < 150) return 'bg-yellow-400';
-      if (this.wireguardLatencyMs < 500) return 'bg-orange-500';
-      return 'bg-red-500';
-    },
-
-    canWriteGA() {
-      if (!this.wireguardEnabled) return true;
-      return this.wireguardAllowedActions.includes('ga_rw');
-    },
-
-    wgActionTooltip(action) {
-      if (!this.wireguardEnabled) return '';
-      if (this.wireguardAllowedActions.includes(action)) return '';
-      if (this.wireguardLatencyMs === null) return 'Keine Latenzmessung verfügbar';
-      return `Latenz zu hoch (${this.wireguardLatencyMs} ms) — nicht verfügbar`;
-    },
-
-    async wgSetup() {
-      this.wgSetupResult = '';
-      this.wgSetupError = '';
-      try {
-        const res = await fetch('/api/wireguard/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.wgSetupData),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          this.wireguardEnabled = true;
-          this.wgSetupResult = data.server_public_key || 'OK';
-        } else {
-          this.wgSetupError = data.detail || 'Fehler';
-        }
-      } catch (e) {
-        this.wgSetupError = 'Netzwerkfehler: ' + e.message;
-      }
-    },
-
-    async wgTeardown() {
-      if (!confirm('WireGuard-Tunnel abbauen?')) return;
-      try {
-        const res = await fetch('/api/wireguard/setup', { method: 'DELETE' });
-        if (res.ok) {
-          this.wireguardEnabled = false;
-          this.wireguardLatencyMs = null;
-          this.wireguardAllowedActions = ['monitor'];
-          this.wireguardEtsPortActive = false;
-        }
-      } catch (_) {}
-    },
-
-    async wgToggleEts() {
-      try {
-        const res = await fetch('/api/wireguard/ets-access', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enable: !this.wireguardEtsPortActive }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          this.wireguardEtsPortActive = data.ets_port_active;
-        }
-      } catch (_) {}
-    },
-
-    async wgMeasureLatency() {
-      try {
-        const res = await fetch('/api/wireguard/latency-test', { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          this.wireguardLatencyMs = data.latency_ms;
-          this.wireguardAllowedActions = data.allowed_actions;
-        }
-      } catch (_) {}
-    },
-
-    async wgDownloadPeerConfig() {
-      const a = document.createElement('a');
-      a.href = '/api/wireguard/peer-config';
-      a.download = 'wg0_client.conf';
-      a.click();
-    },
-
-    startEdit(type, key, field, current) {
-      this.editingKey = `${type}|${key}|${field}`;
-      this.editValue = current;
-    },
-
-    async saveEdit() {
-      if (!this.editingKey) return;
-      const parts = this.editingKey.split('|');
-      const type = parts[0];
-      const field = parts[parts.length - 1];
-      const key = parts.slice(1, -1).join('|');
-      this.editingKey = '';
-      if (!this.annotations[type]) this.annotations[type] = {};
-      if (!this.annotations[type][key]) this.annotations[type][key] = {};
-      this.annotations[type][key][field] = this.editValue;
-      this.annotations = { ...this.annotations };  // trigger reactivity
-      await fetch('/api/annotations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.annotations),
-      });
-    },
-
-    get busDevices() {
-      const map = {};
-      for (const e of this.liveLog) {
-        if (!map[e.src]) map[e.src] = { individual_address: e.src, busName: e.device || '', count: 0, lastTs: e.ts, gas: [] };
-        const d = map[e.src];
-        d.count++;
-        if (e.ts > d.lastTs) d.lastTs = e.ts;
-        if (e.ga && !d.gas.includes(e.ga)) d.gas.push(e.ga);
-        if (!d.busName && e.device) d.busName = e.device;
-      }
-      return Object.values(map)
-        .map(d => ({ ...d, gas: d.gas.sort(),
-          name: this.annotations.devices?.[d.individual_address]?.name ?? d.busName ?? '',
-          description: this.annotations.devices?.[d.individual_address]?.description ?? '' }))
-        .sort((a, b) => a.individual_address.localeCompare(b.individual_address));
-    },
-
-    get filteredBusDevices() {
-      const q = this.deviceSearch.toLowerCase();
-      if (!q) return this.busDevices;
-      return this.busDevices.filter(d =>
-        d.individual_address.includes(q) || d.name.toLowerCase().includes(q) ||
-        (d.description || '').toLowerCase().includes(q));
-    },
-
-    get busGAs() {
-      const map = {};
-      for (const e of this.liveLog) {  // newest first — first occurrence = latest value
-        if (!map[e.ga]) map[e.ga] = { address: e.ga, busName: e.ga_name || '', lastValue: e.value, lastTs: e.ts, srcs: [] };
-        const g = map[e.ga];
-        if (!g.srcs.includes(e.src)) g.srcs.push(e.src);
-        if (!g.busName && e.ga_name) g.busName = e.ga_name;
-      }
-      return Object.values(map)
-        .map(g => ({ ...g, srcs: g.srcs.sort(),
-          name: this.annotations.group_addresses?.[g.address]?.name ?? g.busName ?? '',
-          description: this.annotations.group_addresses?.[g.address]?.description ?? '' }))
-        .sort((a, b) => a.address.localeCompare(b.address));
-    },
-
-    get filteredBusGAs() {
-      const q = this.gaSearch.toLowerCase();
-      if (!q) return this.busGAs;
-      return this.busGAs.filter(g =>
-        g.address.includes(q) || g.name.toLowerCase().includes(q) ||
-        (g.description || '').toLowerCase().includes(q));
-    },
-
-    connectWebSocket() {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      this.ws = new WebSocket(`${protocol}//${location.host}/ws`);
-      this.ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'status') {
-          this.wsStatus = msg.connected ? 'connected' : 'disconnected';
-          if (msg.ip === 'remote') {
-            this.remoteGatewayConnected = msg.connected;
-          } else {
-            this.gatewayIP = msg.ip || '';
-            this.gatewayPort = msg.port || 3671;
-          }
-          this.gatewayLanguage = msg.language || 'de-DE';
-        } else if (msg.type === 'snapshot') {
-          this.currentValues = msg.values;
-        } else if (msg.type === 'history') {
-          this.liveLog = msg.entries;  // replaces entire log (newest first)
-        } else if (msg.type === 'telegram') {
-          this.currentValues[msg.ga] = { value: msg.value, ts: msg.ts };
-          if (!this.liveLogPaused) {
-            this.liveLog = [msg, ...this.liveLog].slice(0, 1000);
-          }
-        } else if (msg.type === 'wireguard_status') {
-          this.wireguardLatencyMs = msg.latency_ms;
-          this.wireguardPeerConnected = msg.peer_connected;
-          this.wireguardAllowedActions = msg.allowed_actions;
-        } else if (msg.type === 'scan_pa_found') {
-          this.paScanFound = [...this.paScanFound, msg.address];
-        } else if (msg.type === 'scan_pa_progress') {
-          this.paScanProgress = msg.done;
-          this.paScanTotal = msg.total;
-        } else if (msg.type === 'scan_pa_complete') {
-          this.paScanning = false;
-          this.paScanProgress = msg.total;
-          this.paScanTotal = msg.total;
-          this.paScanDone = true;
-          this.paScanCancelled = msg.cancelled || false;
-          if (msg.found && msg.found.length > 0) this.paScanFound = msg.found;
-        } else if (msg.type === 'scan_ga_progress') {
-          this.gaScanProgress = msg.done;
-          this.gaScanTotal = msg.total;
-        } else if (msg.type === 'scan_ga_complete') {
-          this.gaScanning = false;
-          this.gaScanProgress = msg.total;
-          this.gaScanTotal = msg.total;
-          this.gaScanDone = true;
-          this.gaScanCancelled = msg.cancelled || false;
-        } else if (msg.type === 'telegram' && this.gaScanning) {
-          if (msg.apci === 'GroupValueResponse') this.gaScanResponded++;
-        }
-      };
-      this.ws.onclose = () => {
-        this.wsStatus = 'disconnected';
-        setTimeout(() => this.connectWebSocket(), 3000);
-      };
-      this.ws.onerror = () => { this.wsStatus = 'error'; };
-    },
-
-    skipToMonitor() {
-      this.phase = 'result';
-      this.activeTab = 'bus_monitor';
-    },
-
-    async loadLastProjectInfo() {
-      try {
-        const res = await fetch('/api/last-project/info');
-        if (res.ok) {
-          const info = await res.json();
-          this.lastProjectFilename = info.filename;
-        }
-      } catch (_) {}
-    },
-
-    async loadRecentProjects() {
-      if (this.publicMode) return;
-      try {
-        const res = await fetch('/api/recent-projects');
-        if (res.ok) this.recentProjects = await res.json();
-      } catch (_) {}
-    },
-
-    async loadSelectedRecentProject() {
-      if (!this.selectedRecentSlug) return;
-      this.loading = true;
-      this.error = '';
-      try {
-        const res = await fetch(`/api/recent-projects/${this.selectedRecentSlug}/data`);
-        if (!res.ok) { this.error = 'Fehler beim Laden'; return; }
         this.project = await res.json();
         this.phase = 'result';
         this.activeTab = 'info';
+        this.newLlmChat();
         this.selectedRecentSlug = null;
         this.loadRecentProjects();
+        this.newLlmChat();
       } catch (e) {
         this.error = 'Netzwerkfehler: ' + e.message;
       } finally {
@@ -1968,6 +1752,7 @@ function app() {
         this.project = await res.json();
         this.phase = 'result';
         this.activeTab = 'info';
+        this.newLlmChat();
       } catch (e) {
         this.error = 'Netzwerkfehler: ' + e.message;
       } finally {
@@ -1984,6 +1769,7 @@ function app() {
         this.project = await res.json();
         this.phase = 'result';
         this.activeTab = 'info';
+        this.newLlmChat();
       } catch (e) {
         this.error = 'Netzwerkfehler: ' + e.message;
       } finally {
@@ -2010,6 +1796,16 @@ function app() {
         { label: pair[0], value: '0' },
         { label: pair[1], value: '1' },
       ];
+    },
+
+    renderMarkdown(text) {
+      if (!text) return '';
+      if (typeof marked === 'undefined') return text;
+      try {
+        return marked.parse(text, { breaks: true, gfm: true });
+      } catch (e) {
+        return text;
+      }
     },
 
     gaIsReadable(ga) {
@@ -2092,16 +1888,30 @@ function app() {
       }
     },
 
+    setLlmQuestion(question) {
+      this.llmQuestion = question;
+      this.analyzeLlm();
+    },
+
     async analyzeLlm() {
+      if (!this.llmQuestion.trim()) return;
+
       this.llmLoading = true;
       this.llmError = '';
       this.llmResponse = '';
       this.llmReasoning = '';
+
+      // Store current question
+      const currentQuestion = this.llmQuestion.trim();
+      
       try {
         const res = await fetch('/api/llm/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: this.llmQuestion }),
+          body: JSON.stringify({ 
+            question: currentQuestion,
+            history: this.llmMessages
+          }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -2124,6 +1934,16 @@ function app() {
             } catch (_) {}
           }
         }
+        
+        // Add Q&A to history
+        this.llmMessages.push(
+          { role: 'user', content: currentQuestion },
+          { role: 'assistant', content: this.llmResponse }
+        );
+        
+        // Clear input for next question
+        this.llmQuestion = '';
+        
       } catch (e) {
         this.llmError = 'Netzwerkfehler: ' + e.message;
       } finally {
@@ -2131,21 +1951,34 @@ function app() {
       }
     },
 
+    newLlmChat() {
+      this.llmMessages = [];
+      this.llmResponse = '';
+      this.llmReasoning = '';
+      this.llmError = '';
+      this.llmQuestion = '';
+    },
+
     exportLlm() {
       const projectName = this.project?.info?.name ?? 'KNX-Projekt';
-      const question = this.llmQuestion?.trim() || 'Automatische Projektübersicht';
       const lines = [
         `# KI-Analyse: ${projectName}`,
         '',
-        `**Frage:** ${question}`,
+        `**Datum:** ${new Date().toLocaleString('de-DE')}`,
         '',
         '---',
         '',
-        this.llmResponse,
       ];
-      if (this.llmReasoning) {
-        lines.push('', '---', '', '## Denkprozess', '', this.llmReasoning);
+      
+      // Export entire conversation history
+      for (const msg of this.llmMessages) {
+        if (msg.role === 'user') {
+          lines.push(`## Frage`, '', msg.content, '');
+        } else {
+          lines.push('## Antwort', '', msg.content, '', '---', '');
+        }
       }
+      
       const safe = projectName.replace(/[^a-zA-Z0-9_-]/g, '_');
       this._download(lines.join('\n'), `ki_analyse_${safe}.md`, 'text/markdown;charset=utf-8');
     },
@@ -2442,6 +2275,7 @@ function app() {
         this.project = await res.json();
         this.phase = 'result';
         this.loadRecentProjects();
+        this.newLlmChat();
       } catch (e) {
         this.error = 'Netzwerkfehler: ' + e.message;
       } finally {
@@ -2460,6 +2294,7 @@ function app() {
       this.deviceSearch = '';
       this.gaSearch = '';
       this.coSearch = '';
+      this.newLlmChat();
     },
 
     _b64ToHex(s) {
