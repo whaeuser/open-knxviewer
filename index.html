@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
     .tab-active { @apply border-b-2 border-blue-600 text-blue-600; }
@@ -1094,6 +1095,75 @@
       </div>
     </div>
 
+    <!-- KOMMUNIKATION TAB -->
+    <div x-show="activeTab === 'communication'">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <h2 class="text-lg font-semibold text-gray-700 mr-2">Kommunikationsgraph</h2>
+        <input x-model="commGraphFilter" @input.debounce.300ms="filterCommGraph()" type="search"
+               placeholder="Gerät oder GA suchen…"
+               class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <button @click="resetCommGraphView()"
+                class="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Zurücksetzen</button>
+        <span x-show="commGraphStats" class="text-gray-400 text-sm ml-auto"
+              x-text="(commGraphStats?.devices ?? 0) + ' Geräte, ' + (commGraphStats?.gas ?? 0) + ' GAs, ' + (commGraphStats?.edges ?? 0) + ' Verbindungen'"></span>
+      </div>
+      <!-- Legende -->
+      <div class="flex items-center gap-4 mb-3 text-xs text-gray-500 flex-wrap">
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-blue-400"></span> Gerät</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-green-400"></span> Gruppenadresse</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-orange-400"></span> Senden (Transmit)</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-blue-500"></span> Empfangen (Write/Update)</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-gray-300 border-t border-dashed border-gray-400"></span> Ohne Richtung</span>
+      </div>
+      <!-- Graph Container -->
+      <div class="bg-white rounded-xl shadow border border-gray-100 relative">
+        <div x-show="!commGraphReady && activeTab === 'communication'" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 z-10 rounded-xl">
+          <div class="text-center">
+            <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span class="text-gray-500 text-sm">Graph wird aufgebaut…</span>
+          </div>
+        </div>
+        <div x-ref="commGraphContainer" style="height: 70vh;"></div>
+      </div>
+      <!-- Detail Panel -->
+      <div x-show="commSelectedNode" x-transition class="mt-4 bg-white rounded-xl shadow border border-gray-100 p-4">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wide"
+                  :class="commSelectedNode?.type === 'device' ? 'text-blue-600' : 'text-green-600'"
+                  x-text="commSelectedNode?.type === 'device' ? 'Gerät' : 'Gruppenadresse'"></span>
+            <h3 class="text-lg font-semibold text-gray-800 mt-0.5" x-text="commSelectedNode?.label"></h3>
+            <p class="text-sm text-gray-500 mt-1" x-text="commSelectedNode?.detail"></p>
+          </div>
+          <div class="flex gap-2">
+            <button x-show="commSelectedNode?.type === 'device'"
+                    @click="deviceSearch = commSelectedNode?.addr; activeTab = 'devices'"
+                    class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100">Geräte-Tab</button>
+            <button x-show="commSelectedNode?.type === 'device'"
+                    @click="navigateToDeviceCOs(commSelectedNode?.addr)"
+                    class="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded hover:bg-purple-100">KO-Tab</button>
+            <button x-show="commSelectedNode?.type === 'ga'"
+                    @click="gaSearch = commSelectedNode?.addr; activeTab = 'group_addresses'"
+                    class="text-xs bg-green-50 text-green-700 px-2 py-1 rounded hover:bg-green-100">GA-Tab</button>
+            <button @click="commSelectedNode = null"
+                    class="text-xs bg-gray-50 text-gray-500 px-2 py-1 rounded hover:bg-gray-100">Schließen</button>
+          </div>
+        </div>
+        <!-- Connected nodes list -->
+        <div x-show="commSelectedNode?.neighbors?.length" class="mt-3 border-t pt-3">
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Verbunden mit:</span>
+          <div class="flex flex-wrap gap-1.5 mt-1.5">
+            <template x-for="nb in (commSelectedNode?.neighbors ?? [])" :key="nb.id">
+              <span class="text-xs px-2 py-0.5 rounded cursor-pointer"
+                    :class="nb.type === 'device' ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'bg-green-50 text-green-700 hover:bg-green-100'"
+                    @click="commNetwork?.selectNodes([nb.id]); commNetwork?.focus(nb.id, {scale: 1.2, animation: true})"
+                    x-text="nb.label"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- BUS MONITOR TAB -->
     <div x-show="activeTab === 'bus_monitor'">
       <div class="flex items-center gap-3 mb-4 flex-wrap">
@@ -1671,6 +1741,7 @@ function app() {
       { id: 'locations', label: 'Standorte' },
       { id: 'com_objects', label: 'Kommunikationsobjekte' },
       { id: 'functions', label: 'Funktionen' },
+      { id: 'communication', label: 'Kommunikation' },
       { id: 'bus_monitor', label: 'Bus-Monitor' },
       { id: 'bus_scan', label: 'Bus-Scan' },
       { id: 'ki_analyse', label: 'KI-Analyse' },
@@ -1743,6 +1814,17 @@ function app() {
     wgSetupResult: '',
     wgSetupError: '',
 
+    // Kommunikationsgraph
+    commNetwork: null,
+    commGraphFilter: '',
+    commGraphReady: false,
+    commSelectedNode: null,
+    commGraphStats: null,
+    _commNodes: null,
+    _commEdges: null,
+    _commAllNodes: null,
+    _commAllEdges: null,
+
     // Bus-Scan state
     progModeLoading: false,
     progModeResults: [],
@@ -1798,6 +1880,11 @@ function app() {
           if (res.ok) this.demoAvailable = (await res.json()).available;
         } catch (_) {}
       }
+      this.$watch('activeTab', (tab) => {
+        if (tab === 'communication' && this.project && !this.commGraphReady) {
+          this.$nextTick(() => this.buildCommGraph());
+        }
+      });
       this.initializing = false;
     },
 
@@ -2083,6 +2170,7 @@ function app() {
         const res = await fetch(`/api/recent-projects/${this.selectedRecentSlug}/data`);
         if (!res.ok) { this.error = 'Fehler beim Laden'; return; }
         this.project = await res.json();
+        this.commGraphReady = false; this.commSelectedNode = null; if (this.commNetwork) { this.commNetwork.destroy(); this.commNetwork = null; }
         this.phase = 'result';
         this.activeTab = 'info';
         this.currentProjectSlug = this.selectedRecentSlug;
@@ -2173,6 +2261,7 @@ function app() {
         const res = await fetch('/api/demo');
         if (!res.ok) { this.error = 'Demo konnte nicht geladen werden'; return; }
         this.project = await res.json();
+        this.commGraphReady = false; this.commSelectedNode = null; if (this.commNetwork) { this.commNetwork.destroy(); this.commNetwork = null; }
         this.phase = 'result';
         this.activeTab = 'info';
         this.newLlmChat();
@@ -2190,6 +2279,7 @@ function app() {
         const res = await fetch('/api/last-project/data');
         if (!res.ok) { this.error = 'Fehler beim Laden des letzten Projekts'; return; }
         this.project = await res.json();
+        this.commGraphReady = false; this.commSelectedNode = null; if (this.commNetwork) { this.commNetwork.destroy(); this.commNetwork = null; }
         this.phase = 'result';
         this.activeTab = 'info';
         this.newLlmChat();
@@ -2572,6 +2662,7 @@ function app() {
     get visibleTabs() {
       return this.tabs.filter(tab => {
         if (tab.id === 'functions') return this.project && Object.keys(this.project.functions ?? {}).length > 0;
+        if (tab.id === 'communication') return !!this.project;
         if (tab.id === 'bus_monitor') return !this.publicMode;
         if (tab.id === 'bus_scan') return !this.publicMode;
         if (tab.id === 'ki_analyse') return !this.publicMode && this.llmConfigured && !!this.project;
@@ -2696,6 +2787,7 @@ function app() {
           return;
         }
         this.project = await res.json();
+        this.commGraphReady = false; this.commSelectedNode = null; if (this.commNetwork) { this.commNetwork.destroy(); this.commNetwork = null; }
         this.phase = 'result';
         this.currentProjectSlug = null;
         this.loadRecentProjects();
@@ -2710,6 +2802,7 @@ function app() {
     reset() {
       this.phase = 'upload';
       this.project = null;
+      this.commGraphReady = false; this.commSelectedNode = null; if (this.commNetwork) { this.commNetwork.destroy(); this.commNetwork = null; }
       this.selectedFile = null;
       this.error = '';
       this.expandedTopology = new Set();
@@ -3169,6 +3262,216 @@ function app() {
         this.expandedTopology.add(key);
       }
       this.expandedTopology = new Set(this.expandedTopology);
+    },
+
+    // --- Kommunikationsgraph ---
+
+    buildCommGraph() {
+      if (!this.project) return;
+      const devices = this.project.devices ?? {};
+      const gas = this.project.group_addresses ?? {};
+      const cos = this.project.communication_objects ?? {};
+      const topology = this.project.topology ?? {};
+
+      // Area color palette
+      const areaColors = ['#3B82F6','#8B5CF6','#EC4899','#F59E0B','#10B981','#EF4444','#06B6D4','#84CC16'];
+      const areaColorMap = {};
+      let areaIdx = 0;
+      for (const areaKey of Object.keys(topology)) {
+        areaColorMap[areaKey] = areaColors[areaIdx % areaColors.length];
+        areaIdx++;
+      }
+
+      // Build device → area mapping
+      const deviceAreaColor = {};
+      for (const [areaKey, area] of Object.entries(topology)) {
+        const lines = area.lines ?? area.line ?? {};
+        for (const [lineKey, line] of Object.entries(lines)) {
+          const lineDevices = line.devices ?? [];
+          for (const devAddr of lineDevices) {
+            deviceAreaColor[devAddr] = areaColorMap[areaKey] ?? '#3B82F6';
+          }
+        }
+      }
+
+      const nodes = [];
+      const edges = [];
+      const deviceNodeIds = new Set();
+      const gaNodeIds = new Set();
+
+      // Traverse GAs → COs → devices
+      for (const [gaId, ga] of Object.entries(gas)) {
+        const gaAddr = ga.address ?? gaId;
+        const gaNodeId = 'ga:' + gaAddr;
+        const coIds = ga.communication_object_ids ?? [];
+        if (coIds.length === 0) continue;
+
+        if (!gaNodeIds.has(gaNodeId)) {
+          gaNodeIds.add(gaNodeId);
+          const dptStr = ga.dpt ? (ga.dpt.main + (ga.dpt.sub != null ? '.' + String(ga.dpt.sub).padStart(3,'0') : '')) : '';
+          nodes.push({
+            id: gaNodeId,
+            label: gaAddr + (ga.name ? '\n' + ga.name : ''),
+            shape: 'box',
+            color: { background: '#D1FAE5', border: '#10B981', highlight: { background: '#A7F3D0', border: '#059669' } },
+            font: { size: 11, multi: true },
+            title: (ga.name ?? gaAddr) + (dptStr ? '\nDPT: ' + dptStr : '') + (ga.description ? '\n' + ga.description : ''),
+            _type: 'ga', _addr: gaAddr, _name: ga.name ?? '', _dpt: dptStr, _desc: ga.description ?? ''
+          });
+        }
+
+        for (const coId of coIds) {
+          const co = cos[coId];
+          if (!co) continue;
+          const devAddr = co.device_address;
+          if (!devAddr) continue;
+
+          const devNodeId = 'dev:' + devAddr;
+          if (!deviceNodeIds.has(devNodeId)) {
+            deviceNodeIds.add(devNodeId);
+            const dev = devices[devAddr];
+            const devName = dev?.name ?? devAddr;
+            const color = deviceAreaColor[devAddr] ?? '#3B82F6';
+            nodes.push({
+              id: devNodeId,
+              label: devAddr + '\n' + devName,
+              shape: 'dot',
+              size: 16,
+              color: { background: color, border: color, highlight: { background: color, border: '#1E3A5F' } },
+              font: { size: 11, color: '#374151', multi: true },
+              title: devName + '\n' + devAddr + (dev?.manufacturer_name ? '\n' + dev.manufacturer_name : '') + (dev?.order_number ? '\n' + dev.order_number : ''),
+              _type: 'device', _addr: devAddr, _name: devName,
+              _detail: (dev?.manufacturer_name ?? '') + (dev?.order_number ? ' (' + dev.order_number + ')' : '')
+            });
+          }
+
+          const flags = co.flags ?? {};
+          const edgeId = devAddr + '|' + gaAddr + '|' + coId;
+          if (flags.transmit) {
+            edges.push({ id: edgeId, from: devNodeId, to: gaNodeId, arrows: 'to', color: { color: '#F97316', highlight: '#EA580C' }, width: 1.5, title: 'Transmit: ' + (co.name ?? coId) });
+          } else if (flags.write || flags.update) {
+            edges.push({ id: edgeId, from: gaNodeId, to: devNodeId, arrows: 'to', color: { color: '#3B82F6', highlight: '#1D4ED8' }, width: 1.5, title: (flags.write ? 'Write' : 'Update') + ': ' + (co.name ?? coId) });
+          } else {
+            edges.push({ id: edgeId, from: devNodeId, to: gaNodeId, dashes: true, color: { color: '#D1D5DB', highlight: '#9CA3AF' }, width: 1, title: co.name ?? coId });
+          }
+        }
+      }
+
+      const totalNodes = nodes.length;
+      this._commAllNodes = nodes;
+      this._commAllEdges = edges;
+
+      this._commNodes = new vis.DataSet(nodes);
+      this._commEdges = new vis.DataSet(edges);
+
+      const container = this.$refs.commGraphContainer;
+      if (!container) return;
+
+      // Physics settings based on graph size
+      let physicsOpts;
+      if (totalNodes > 1000) {
+        physicsOpts = { enabled: false };
+      } else if (totalNodes > 500) {
+        physicsOpts = { enabled: true, stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -3000, springLength: 200, springConstant: 0.02 } };
+      } else {
+        physicsOpts = { enabled: true, stabilization: { iterations: 300 }, barnesHut: { gravitationalConstant: -5000, springLength: 150, springConstant: 0.04 } };
+      }
+
+      const options = {
+        nodes: { borderWidth: 1.5, shadow: false },
+        edges: { smooth: { type: 'continuous' }, width: 1 },
+        physics: physicsOpts,
+        interaction: { hover: true, tooltipDelay: 200, navigationButtons: true, keyboard: true },
+        layout: { improvedLayout: totalNodes < 300 }
+      };
+
+      if (this.commNetwork) this.commNetwork.destroy();
+      this.commNetwork = new vis.Network(container, { nodes: this._commNodes, edges: this._commEdges }, options);
+
+      this.commGraphStats = { devices: deviceNodeIds.size, gas: gaNodeIds.size, edges: edges.length };
+
+      this.commNetwork.once('stabilizationIterationsDone', () => {
+        this.commNetwork.setOptions({ physics: { enabled: false } });
+        this.commGraphReady = true;
+      });
+      // If physics disabled from start, mark ready immediately
+      if (!physicsOpts.enabled) {
+        this.commGraphReady = true;
+      }
+
+      // Event handlers
+      this.commNetwork.on('click', (params) => {
+        if (params.nodes.length === 0) { this.commSelectedNode = null; return; }
+        const nodeId = params.nodes[0];
+        const node = this._commNodes.get(nodeId);
+        if (!node) return;
+        const connectedEdges = this.commNetwork.getConnectedEdges(nodeId);
+        const connectedNodes = this.commNetwork.getConnectedNodes(nodeId);
+        const neighbors = connectedNodes.map(nid => {
+          const n = this._commNodes.get(nid);
+          return n ? { id: nid, label: n._addr + (n._name ? ' ' + n._name : ''), type: n._type } : null;
+        }).filter(Boolean);
+        this.commSelectedNode = {
+          type: node._type, addr: node._addr, label: node._addr + (node._name ? ' — ' + node._name : ''),
+          detail: node._type === 'device' ? node._detail : ('DPT: ' + (node._dpt || '—') + (node._desc ? ' | ' + node._desc : '')),
+          neighbors
+        };
+      });
+
+      this.commNetwork.on('doubleClick', (params) => {
+        if (params.nodes.length === 0) return;
+        const nodeId = params.nodes[0];
+        const connected = this.commNetwork.getConnectedNodes(nodeId);
+        this.commNetwork.fit({ nodes: [nodeId, ...connected], animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      });
+    },
+
+    filterCommGraph() {
+      if (!this.commNetwork || !this._commAllNodes) return;
+      const q = this.commGraphFilter.trim().toLowerCase();
+      if (!q) { this.resetCommGraphView(); return; }
+
+      const matchIds = new Set();
+      for (const node of this._commAllNodes) {
+        const text = (node._addr + ' ' + node._name + ' ' + (node._detail ?? '') + ' ' + (node._dpt ?? '') + ' ' + (node._desc ?? '')).toLowerCase();
+        if (text.includes(q)) matchIds.add(node.id);
+      }
+      // Add 1-hop neighbors
+      const neighborIds = new Set(matchIds);
+      for (const edge of this._commAllEdges) {
+        if (matchIds.has(edge.from)) neighborIds.add(edge.to);
+        if (matchIds.has(edge.to)) neighborIds.add(edge.from);
+      }
+
+      const filteredNodes = this._commAllNodes.filter(n => neighborIds.has(n.id));
+      const filteredEdges = this._commAllEdges.filter(e => neighborIds.has(e.from) && neighborIds.has(e.to));
+
+      this._commNodes.clear();
+      this._commNodes.add(filteredNodes);
+      this._commEdges.clear();
+      this._commEdges.add(filteredEdges);
+
+      const deviceCount = filteredNodes.filter(n => n._type === 'device').length;
+      const gaCount = filteredNodes.filter(n => n._type === 'ga').length;
+      this.commGraphStats = { devices: deviceCount, gas: gaCount, edges: filteredEdges.length };
+
+      this.commNetwork.fit({ animation: { duration: 300 } });
+    },
+
+    resetCommGraphView() {
+      if (!this.commNetwork || !this._commAllNodes) return;
+      this._commNodes.clear();
+      this._commNodes.add(this._commAllNodes);
+      this._commEdges.clear();
+      this._commEdges.add(this._commAllEdges);
+      this.commGraphStats = {
+        devices: this._commAllNodes.filter(n => n._type === 'device').length,
+        gas: this._commAllNodes.filter(n => n._type === 'ga').length,
+        edges: this._commAllEdges.length
+      };
+      this.commSelectedNode = null;
+      this.commGraphFilter = '';
+      this.commNetwork.fit({ animation: { duration: 300 } });
     },
 
     navigateToDeviceCOs(addr) {
