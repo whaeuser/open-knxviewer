@@ -1741,7 +1741,7 @@ function app() {
       { id: 'locations', label: 'Standorte' },
       { id: 'com_objects', label: 'Kommunikationsobjekte' },
       { id: 'functions', label: 'Funktionen' },
-      { id: 'communication', label: 'Kommunikation' },
+      { id: 'communication', label: 'Graph' },
       { id: 'bus_monitor', label: 'Bus-Monitor' },
       { id: 'bus_scan', label: 'Bus-Scan' },
       { id: 'ki_analyse', label: 'KI-Analyse' },
@@ -3371,18 +3371,30 @@ function app() {
       let physicsOpts;
       if (totalNodes > 1000) {
         physicsOpts = { enabled: false };
-      } else if (totalNodes > 500) {
-        physicsOpts = { enabled: true, stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -3000, springLength: 200, springConstant: 0.02 } };
+      } else if (totalNodes > 300) {
+        physicsOpts = {
+          enabled: true,
+          stabilization: { iterations: 200, updateInterval: 25 },
+          forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.01, springLength: 220, springConstant: 0.08, damping: 0.6, avoidOverlap: 0.8 },
+          solver: 'forceAtlas2Based',
+          minVelocity: 0.75
+        };
       } else {
-        physicsOpts = { enabled: true, stabilization: { iterations: 300 }, barnesHut: { gravitationalConstant: -5000, springLength: 150, springConstant: 0.04 } };
+        physicsOpts = {
+          enabled: true,
+          stabilization: { iterations: 400, updateInterval: 25 },
+          forceAtlas2Based: { gravitationalConstant: -120, centralGravity: 0.005, springLength: 280, springConstant: 0.06, damping: 0.5, avoidOverlap: 1.0 },
+          solver: 'forceAtlas2Based',
+          minVelocity: 0.5
+        };
       }
 
       const options = {
-        nodes: { borderWidth: 1.5, shadow: false },
-        edges: { smooth: { type: 'continuous' }, width: 1 },
+        nodes: { borderWidth: 1.5, shadow: false, margin: 8 },
+        edges: { smooth: { type: 'dynamic' }, width: 1 },
         physics: physicsOpts,
         interaction: { hover: true, tooltipDelay: 200, navigationButtons: true, keyboard: true },
-        layout: { improvedLayout: totalNodes < 300 }
+        layout: { improvedLayout: totalNodes < 200 }
       };
 
       if (this.commNetwork) this.commNetwork.destroy();
@@ -3416,6 +3428,9 @@ function app() {
           detail: node._type === 'device' ? node._detail : ('DPT: ' + (node._dpt || '—') + (node._desc ? ' | ' + node._desc : '')),
           neighbors
         };
+        // Clicking a GA or device node filters the graph to that node and its neighbors
+        this.commGraphFilter = node._addr;
+        this.filterCommGraph();
       });
 
       this.commNetwork.on('doubleClick', (params) => {
@@ -3455,23 +3470,21 @@ function app() {
       const gaCount = filteredNodes.filter(n => n._type === 'ga').length;
       this.commGraphStats = { devices: deviceCount, gas: gaCount, edges: filteredEdges.length };
 
-      this.commNetwork.fit({ animation: { duration: 300 } });
+      // Re-run physics so filtered nodes redistribute cleanly
+      this.commNetwork.setOptions({ physics: { enabled: true } });
+      this.commNetwork.once('stabilizationIterationsDone', () => {
+        this.commNetwork.setOptions({ physics: { enabled: false } });
+        this.commNetwork.fit({ animation: { duration: 300 } });
+      });
+      this.commNetwork.stabilize(200);
     },
 
     resetCommGraphView() {
-      if (!this.commNetwork || !this._commAllNodes) return;
-      this._commNodes.clear();
-      this._commNodes.add(this._commAllNodes);
-      this._commEdges.clear();
-      this._commEdges.add(this._commAllEdges);
-      this.commGraphStats = {
-        devices: this._commAllNodes.filter(n => n._type === 'device').length,
-        gas: this._commAllNodes.filter(n => n._type === 'ga').length,
-        edges: this._commAllEdges.length
-      };
+      if (!this.project) return;
       this.commSelectedNode = null;
       this.commGraphFilter = '';
-      this.commNetwork.fit({ animation: { duration: 300 } });
+      this.commGraphReady = false;
+      this.$nextTick(() => this.buildCommGraph());
     },
 
     navigateToDeviceCOs(addr) {
