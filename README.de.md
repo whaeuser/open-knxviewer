@@ -126,6 +126,19 @@ Access-Logs werden in `./logs/access_public.log` auf dem Host gespeichert (als V
 
 > **Hinweis:** Die Windows-Version wurde teilweise getestet.
 
+#### Voraussetzungen
+
+Git und Python 3.13 per winget installieren (PowerShell):
+
+```powershell
+winget install Git.Git
+winget install Python.Python.3.13
+```
+
+Danach PowerShell neu starten, damit `git` und `python` im PATH verfügbar sind.
+
+#### Befehle
+
 ```bat
 openknxviewer.bat setup
 openknxviewer.bat start
@@ -136,6 +149,16 @@ openknxviewer.bat logs --lines 100
 openknxviewer.bat gateway --ip 192.168.1.70
 openknxviewer.bat update
 ```
+
+#### Desktop-Verknüpfung
+
+Einmalig ausführen, um eine Verknüpfung auf dem Desktop zu erstellen:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File create_desktop_icon.ps1
+```
+
+Ein Doppelklick auf **KNX Viewer starten** startet den Server im Hintergrund und öffnet `http://localhost:8002` automatisch im Browser.
 
 > Autostart unter Windows: Aufgabenplanung (Task Scheduler) manuell einrichten.
 

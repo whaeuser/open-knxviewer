@@ -113,7 +113,7 @@ set _LBL=%~2
 if exist "%_PF%" (
     set /p _PID=<"%_PF%"
     taskkill /PID !_PID! /F >nul 2>&1
-    if errorlevel 1 (echo !_LBL! war nicht aktiv.) else (echo !_LBL! gestoppt (PID !_PID!).)
+    if errorlevel 1 (echo !_LBL! war nicht aktiv.) else (echo !_LBL! gestoppt ^(PID !_PID!^).)
     del "%_PF%"
 ) else (
     echo Kein PID-File fuer !_LBL! gefunden.

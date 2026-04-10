@@ -126,6 +126,19 @@ Access logs are written to `./logs/access_public.log` on the host (mounted as a 
 
 > **Note:** The Windows version has been partially tested.
 
+#### Prerequisites
+
+Install Git and Python 3.13 via winget (PowerShell):
+
+```powershell
+winget install Git.Git
+winget install Python.Python.3.13
+```
+
+Restart PowerShell afterwards so that `git` and `python` are on the PATH.
+
+#### Commands
+
 ```bat
 openknxviewer.bat setup
 openknxviewer.bat start
@@ -136,6 +149,16 @@ openknxviewer.bat logs --lines 100
 openknxviewer.bat gateway --ip 192.168.1.70
 openknxviewer.bat update
 ```
+
+#### Desktop shortcut
+
+Run once to create a shortcut on the Desktop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File create_desktop_icon.ps1
+```
+
+Double-clicking **KNX Viewer starten** starts the server silently and opens `http://localhost:8002` in the browser automatically.
 
 > Autostart on Windows: configure manually via Task Scheduler.
 
