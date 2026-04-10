@@ -70,35 +70,23 @@ if %PUBLIC%==1 (
 :: Get or prompt for port
 if defined PORT_OVERRIDE (
     set USE_PORT=!PORT_OVERRIDE!
-    powershell -NoProfile -Command ^
-        "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-        $d|Add-Member -Force NotePropertyName '!CFG_KEY!' -NotePropertyValue [int]'!USE_PORT!'; ^
-        $d|ConvertTo-Json|Set-Content '!CFG!'"
+    powershell -NoProfile -Command "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; $d|Add-Member -Force -NotePropertyName '!CFG_KEY!' -NotePropertyValue !USE_PORT!; $d|ConvertTo-Json|Set-Content '!CFG!'"
 ) else (
-    for /f "delims=" %%P in ('powershell -NoProfile -Command ^
-        "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-        $v=$d.'!CFG_KEY!'; if($v){$v}else{''}") do set STORED=%%P
+    powershell -NoProfile -Command "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; $v=$d.'!CFG_KEY!'; [string]$v" > "%TEMP%\_knxport.tmp" 2>nul
+    set STORED=
+    set /p STORED= < "%TEMP%\_knxport.tmp"
+    del "%TEMP%\_knxport.tmp" 2>nul
     if "!STORED!"=="" (
         set /p USE_PORT=!LABEL! Port [!DEFAULT_PORT!]:
         if "!USE_PORT!"=="" set USE_PORT=!DEFAULT_PORT!
-        powershell -NoProfile -Command ^
-            "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-            $d|Add-Member -Force NotePropertyName '!CFG_KEY!' -NotePropertyValue [int]'!USE_PORT!'; ^
-            $d|ConvertTo-Json|Set-Content '!CFG!'"
+        powershell -NoProfile -Command "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; $d|Add-Member -Force -NotePropertyName '!CFG_KEY!' -NotePropertyValue !USE_PORT!; $d|ConvertTo-Json|Set-Content '!CFG!'"
         echo   Port !USE_PORT! in config.json gespeichert.
     ) else (
         set USE_PORT=!STORED!
     )
 )
 
-powershell -NoProfile -Command ^
-    "$p = Start-Process -FilePath '!VENV_DIR!\Scripts\uvicorn.exe' ^
-    -ArgumentList '!SERVER!','--host','0.0.0.0','--port','!USE_PORT!' ^
-    -WorkingDirectory '!SCRIPT_DIR!' ^
-    -RedirectStandardOutput '!STDOUT!' ^
-    -RedirectStandardError '!STDERR!' ^
-    -WindowStyle Hidden -PassThru; ^
-    $p.Id | Out-File -Encoding ascii '!PF!'"
+powershell -NoProfile -Command "$p=Start-Process -FilePath '!VENV_DIR!\Scripts\uvicorn.exe' -ArgumentList '!SERVER!','--host','0.0.0.0','--port','!USE_PORT!' -WorkingDirectory '!SCRIPT_DIR!' -RedirectStandardOutput '!STDOUT!' -RedirectStandardError '!STDERR!' -WindowStyle Hidden -PassThru; $p.Id|Out-File -Encoding ascii '!PF!'"
 echo !LABEL! gestartet (Port !USE_PORT!)
 goto end
 
