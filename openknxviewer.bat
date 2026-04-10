@@ -75,9 +75,10 @@ if defined PORT_OVERRIDE (
         $d|Add-Member -Force NotePropertyName '!CFG_KEY!' -NotePropertyValue [int]'!USE_PORT!'; ^
         $d|ConvertTo-Json|Set-Content '!CFG!'"
 ) else (
-    for /f "delims=" %%P in ('powershell -NoProfile -Command ^
-        "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-        $v=$d.'!CFG_KEY!'; if($v){$v}else{''}") do set STORED=%%P
+    powershell -NoProfile -Command "$d=if(Test-Path '!CFG!'){Get-Content '!CFG!'|ConvertFrom-Json}else{[pscustomobject]@{}}; $v=$d.'!CFG_KEY!'; [string]$v" > "%TEMP%\_knxport.tmp" 2>nul
+    set STORED=
+    set /p STORED= < "%TEMP%\_knxport.tmp"
+    del "%TEMP%\_knxport.tmp" 2>nul
     if "!STORED!"=="" (
         set /p USE_PORT=!LABEL! Port [!DEFAULT_PORT!]:
         if "!USE_PORT!"=="" set USE_PORT=!DEFAULT_PORT!
