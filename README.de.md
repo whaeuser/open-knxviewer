@@ -124,17 +124,17 @@ Access-Logs werden in `./logs/access_public.log` auf dem Host gespeichert (als V
 
 ### Windows
 
-> **Hinweis:** Die Windows-Version (`openknxviewer.bat`) wurde bisher nicht getestet.
+> **Hinweis:** Die Windows-Version wurde teilweise getestet.
 
 ```bat
-openknxviewer setup
-openknxviewer start
-openknxviewer start --public
-openknxviewer stop
-openknxviewer status
-openknxviewer logs --lines 100
-openknxviewer gateway --ip 192.168.1.70
-openknxviewer update
+openknxviewer.bat setup
+openknxviewer.bat start
+openknxviewer.bat start --public
+openknxviewer.bat stop
+openknxviewer.bat status
+openknxviewer.bat logs --lines 100
+openknxviewer.bat gateway --ip 192.168.1.70
+openknxviewer.bat update
 ```
 
 > Autostart unter Windows: Aufgabenplanung (Task Scheduler) manuell einrichten.

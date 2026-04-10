@@ -124,17 +124,17 @@ Access logs are written to `./logs/access_public.log` on the host (mounted as a 
 
 ### Windows
 
-> **Note:** The Windows version (`openknxviewer.bat`) has not been tested yet.
+> **Note:** The Windows version has been partially tested.
 
 ```bat
-openknxviewer setup
-openknxviewer start
-openknxviewer start --public
-openknxviewer stop
-openknxviewer status
-openknxviewer logs --lines 100
-openknxviewer gateway --ip 192.168.1.70
-openknxviewer update
+openknxviewer.bat setup
+openknxviewer.bat start
+openknxviewer.bat start --public
+openknxviewer.bat stop
+openknxviewer.bat status
+openknxviewer.bat logs --lines 100
+openknxviewer.bat gateway --ip 192.168.1.70
+openknxviewer.bat update
 ```
 
 > Autostart on Windows: configure manually via Task Scheduler.
