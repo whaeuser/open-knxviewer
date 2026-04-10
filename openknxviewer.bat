@@ -122,12 +122,14 @@ goto :eof
 
 :: ── status ───────────────────────────────────────────────────────────────────
 :status
-for /f "delims=" %%P in ('powershell -NoProfile -Command ^
-    "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-    if($d.server_port){$d.server_port}else{8002}") do set PORT_PRIV=%%P
-for /f "delims=" %%P in ('powershell -NoProfile -Command ^
-    "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{}}; ^
-    if($d.server_port_public){$d.server_port_public}else{8004}") do set PORT_PUB=%%P
+powershell -NoProfile -Command "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{}}; if($d.server_port){$d.server_port}else{8002}" > "%TEMP%\_knxp.tmp" 2>nul
+set PORT_PRIV=8002
+set /p PORT_PRIV= < "%TEMP%\_knxp.tmp"
+del "%TEMP%\_knxp.tmp" 2>nul
+powershell -NoProfile -Command "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{}}; if($d.server_port_public){$d.server_port_public}else{8004}" > "%TEMP%\_knxp.tmp" 2>nul
+set PORT_PUB=8004
+set /p PORT_PUB= < "%TEMP%\_knxp.tmp"
+del "%TEMP%\_knxp.tmp" 2>nul
 
 call :status_one "%PID_FILE%"        "Privater Server"     !PORT_PRIV! private
 call :status_one "%PID_FILE_PUBLIC%" "Oeffentlicher Server" !PORT_PUB!  public
@@ -147,10 +149,7 @@ if exist "%_PF%" (
     ) else (
         echo !_LBL!: laeuft (PID !_PID!, Port !_PORT!)
         if "!_TYPE!"=="private" (
-            powershell -NoProfile -Command ^
-                "try { $d=(Invoke-RestMethod http://localhost:!_PORT!/api/gateway); ^
-                $ok=if($d.connected){'verbunden'}else{'nicht verbunden'}; ^
-                Write-Host ('  Gateway: '+$d.ip+':'+$d.port+' - '+$ok+' ['+$d.language+']') } catch {}"
+            powershell -NoProfile -Command "try { $d=(Invoke-RestMethod http://localhost:!_PORT!/api/gateway); $ok=if($d.connected){'verbunden'}else{'nicht verbunden'}; Write-Host ('  Gateway: '+$d.ip+':'+$d.port+' - '+$ok+' ['+$d.language+']') } catch {}"
         )
     )
 ) else (
@@ -193,25 +192,13 @@ shift & goto gw_parse
 :gw_action
 if "%GW_IP%%GW_PORT%%GW_LANG%"=="" (
     if exist "%CFG%" (
-        powershell -NoProfile -Command ^
-            "$d=Get-Content '%CFG%'|ConvertFrom-Json; ^
-            Write-Host ('Gateway-IP:   '  +$d.gateway_ip); ^
-            Write-Host ('Gateway-Port: '  +$d.gateway_port); ^
-            Write-Host ('Sprache:      '  +$d.language); ^
-            Write-Host ('Server-Port:  '  +$(if($d.server_port){$d.server_port}else{8002})); ^
-            Write-Host ('Public-Port:  '  +$(if($d.server_port_public){$d.server_port_public}else{8004}))"
+        powershell -NoProfile -Command "$d=Get-Content '%CFG%'|ConvertFrom-Json; Write-Host ('Gateway-IP:   '+$d.gateway_ip); Write-Host ('Gateway-Port: '+$d.gateway_port); Write-Host ('Sprache:      '+$d.language); Write-Host ('Server-Port:  '+$(if($d.server_port){$d.server_port}else{8002})); Write-Host ('Public-Port:  '+$(if($d.server_port_public){$d.server_port_public}else{8004}))"
     ) else (
         echo config.json nicht gefunden.
     )
     goto end
 )
-powershell -NoProfile -Command ^
-    "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{gateway_ip='';gateway_port=3671;language='de-DE'}}; ^
-    if('%GW_IP%'){$d.gateway_ip='%GW_IP%'}; ^
-    if('%GW_PORT%'){$d.gateway_port=[int]'%GW_PORT%'}; ^
-    if('%GW_LANG%'){$d.language='%GW_LANG%'}; ^
-    $d|ConvertTo-Json|Set-Content '%CFG%'; ^
-    Write-Host ('Gateway gespeichert: '+$d.gateway_ip+':'+$d.gateway_port+', Sprache: '+$d.language)"
+powershell -NoProfile -Command "$d=if(Test-Path '%CFG%'){Get-Content '%CFG%'|ConvertFrom-Json}else{[pscustomobject]@{gateway_ip='';gateway_port=3671;language='de-DE'}}; if('%GW_IP%'){$d.gateway_ip='%GW_IP%'}; if('%GW_PORT%'){$d.gateway_port=[int]'%GW_PORT%'}; if('%GW_LANG%'){$d.language='%GW_LANG%'}; $d|ConvertTo-Json|Set-Content '%CFG%'; Write-Host ('Gateway gespeichert: '+$d.gateway_ip+':'+$d.gateway_port+', Sprache: '+$d.language)"
 goto end
 
 :: ── update ───────────────────────────────────────────────────────────────────
