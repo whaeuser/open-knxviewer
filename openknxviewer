@@ -327,11 +327,25 @@ cmd_autostart() {
         echo "Autostart wird nur unter macOS unterstützt."
         exit 1
     fi
-    local public=false remove=false
-    for arg in "$@"; do
-        [[ "$arg" == "--public" ]] && public=true
-        [[ "$arg" == "--remove" ]] && remove=true
+    local public=false remove=false theme=""
+    local args=("$@") i=0
+    while [[ $i -lt ${#args[@]} ]]; do
+        case "${args[$i]}" in
+            --public) public=true ;;
+            --remove) remove=true ;;
+            --theme)
+                i=$((i+1)); theme="${args[$i]:-}"
+                ;;
+            --theme=*)
+                theme="${args[$i]#--theme=}"
+                ;;
+        esac
+        i=$((i+1))
     done
+    if [[ -n "$theme" && "$theme" != "default" && "$theme" != "voltlogik" ]]; then
+        echo "Fehler: --theme erwartet 'default' oder 'voltlogik' (war: '$theme')"
+        exit 1
+    fi
 
     local label cfg_key default server stdout_log stderr_log
     if $public; then
@@ -362,6 +376,19 @@ cmd_autostart() {
     local port
     port=$(_cfg_get "$cfg_key" "$default")
     mkdir -p "$LOG_DIR"
+
+    # Optionaler EnvironmentVariables-Block (Theme-Default für UI)
+    local env_block=""
+    if [[ -n "$theme" ]]; then
+        env_block=$(cat <<EOF
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OPENKNXVIEWER_THEME</key> <string>${theme}</string>
+    </dict>
+EOF
+)
+    fi
+
     cat >"$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -378,6 +405,7 @@ cmd_autostart() {
     <key>RunAtLoad</key>         <true/>
     <key>KeepAlive</key>         <true/>
     <key>WorkingDirectory</key>  <string>${SCRIPT_DIR}</string>
+${env_block}
     <key>StandardOutPath</key>   <string>${LOG_DIR}/${stdout_log}</string>
     <key>StandardErrorPath</key> <string>${LOG_DIR}/${stderr_log}</string>
 </dict>
@@ -387,6 +415,7 @@ EOF
     launchctl load -w "$plist"
     echo "Autostart installiert: $plist"
     echo "Server startet bei jedem Login auf Port $port."
+    [[ -n "$theme" ]] && echo "Theme-Default: $theme (OPENKNXVIEWER_THEME)"
     echo "Logs: $LOG_DIR/"
 }
 
@@ -480,7 +509,7 @@ usage() {
     echo "  test   [-v] [-k AUSDRUCK]                   Tests ausführen
   update                                      Alle Pakete aktualisieren"
     echo "  stats  [--html] [--output DATEI]            Access-Log mit GoAccess auswerten"
-    echo "  autostart          [--public]               macOS LaunchAgent installieren"
+    echo "  autostart          [--public] [--theme T]   macOS LaunchAgent installieren (T: default|voltlogik)"
     echo "  autostart --remove [--public]               macOS LaunchAgent entfernen"
 }
 

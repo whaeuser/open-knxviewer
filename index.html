@@ -8,6 +8,9 @@
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     [x-cloak] { display: none !important; }
     .tab-active { @apply border-b-2 border-blue-600 text-blue-600; }
@@ -28,9 +31,153 @@
     .markdown-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
     .markdown-content th, .markdown-content td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
     .markdown-content th { background-color: #f9fafb; font-weight: 600; }
+
+    /* =========================================================
+       Optionales Theme "Volt & Logik" — Anthrazit + Kupfer
+       Aktiv über body.theme-voltlogik (in Einstellungen wählbar)
+       ========================================================= */
+    body.theme-voltlogik {
+      --vl-ink: #14202C;
+      --vl-ink-soft: #2A3645;
+      --vl-copper: #E97A38;
+      --vl-copper-dark: #C45D1E;
+      --vl-copper-soft: #F4D1B4;
+      --vl-copper-bg: #FFF7F0;
+      --vl-mute: #6B7280;
+      --vl-line: #E5E7EB;
+      --vl-line-soft: #F0F1F3;
+      --vl-bg: #FAFAF8;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--vl-ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    body.theme-voltlogik.bg-gray-100 { background-color: var(--vl-bg); }
+
+    /* Typografie */
+    body.theme-voltlogik h1,
+    body.theme-voltlogik h2,
+    body.theme-voltlogik h3,
+    body.theme-voltlogik h4 {
+      color: var(--vl-ink);
+      letter-spacing: -0.01em;
+    }
+    body.theme-voltlogik h1 { letter-spacing: -0.02em; }
+    body.theme-voltlogik .font-mono,
+    body.theme-voltlogik code,
+    body.theme-voltlogik pre,
+    body.theme-voltlogik kbd,
+    body.theme-voltlogik samp {
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.01em;
+    }
+
+    /* Header: ruhiger, Schaltplan-Grid-Echo */
+    body.theme-voltlogik > div > header.bg-white {
+      box-shadow: none;
+      border-bottom: 1px solid var(--vl-line);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.96)),
+        linear-gradient(to right, var(--vl-line-soft) 1px, transparent 1px) 0 0 / 56px 56px,
+        linear-gradient(to bottom, var(--vl-line-soft) 1px, transparent 1px) 0 0 / 56px 56px,
+        #FFFFFF;
+      backdrop-filter: saturate(140%) blur(6px);
+    }
+
+    /* Primärbutton: Anthrazit statt Tailwind-Blau */
+    body.theme-voltlogik .bg-blue-600 { background-color: var(--vl-ink); }
+    body.theme-voltlogik .bg-blue-600:hover,
+    body.theme-voltlogik .hover\:bg-blue-700:hover { background-color: var(--vl-copper); }
+
+    /* Akzent-Texte: Kupfer statt Blau */
+    body.theme-voltlogik .text-blue-600 { color: var(--vl-copper); }
+    body.theme-voltlogik .hover\:text-blue-600:hover { color: var(--vl-copper); }
+    body.theme-voltlogik .hover\:text-blue-700:hover,
+    body.theme-voltlogik .hover\:text-blue-800:hover,
+    body.theme-voltlogik .hover\:text-blue-900:hover { color: var(--vl-copper-dark); }
+    body.theme-voltlogik .text-blue-500 { color: var(--vl-copper); }
+    body.theme-voltlogik .text-blue-400 { color: var(--vl-copper-soft); }
+
+    /* Akzent-Hintergründe und Ränder */
+    body.theme-voltlogik .bg-blue-50,
+    body.theme-voltlogik .hover\:bg-blue-50:hover { background-color: var(--vl-copper-bg); }
+    body.theme-voltlogik .bg-blue-100 { background-color: var(--vl-copper-soft); }
+    body.theme-voltlogik .border-blue-200 { border-color: var(--vl-copper-soft); }
+    body.theme-voltlogik .border-blue-300,
+    body.theme-voltlogik .hover\:border-blue-300:hover { border-color: var(--vl-copper-soft); }
+    body.theme-voltlogik .border-blue-400,
+    body.theme-voltlogik .hover\:border-blue-400:hover { border-color: var(--vl-copper); }
+    body.theme-voltlogik .border-blue-500 { border-color: var(--vl-copper); }
+    body.theme-voltlogik .border-blue-600 { border-color: var(--vl-copper); }
+
+    /* Tab-Aktiv-Indikator (border-b-2 border-blue-600 text-blue-600) */
+    body.theme-voltlogik .tab-active,
+    body.theme-voltlogik [class*="border-blue-600"][class*="text-blue-600"] {
+      border-color: var(--vl-copper);
+      color: var(--vl-copper);
+    }
+
+    /* Focus-Ringe in Kupfer */
+    body.theme-voltlogik .focus\:ring-blue-400:focus,
+    body.theme-voltlogik .focus\:ring-blue-500:focus {
+      --tw-ring-color: rgba(233, 122, 56, 0.5);
+    }
+    body.theme-voltlogik .focus\:ring-1:focus,
+    body.theme-voltlogik .focus\:ring-2:focus {
+      --tw-ring-color: rgba(233, 122, 56, 0.5);
+    }
+
+    /* Checkbox-Akzent */
+    body.theme-voltlogik input[type="checkbox"].text-blue-600 { accent-color: var(--vl-copper); }
+    body.theme-voltlogik input[type="checkbox"]:checked { accent-color: var(--vl-copper); }
+
+    /* Karten leicht „technischer": kleinere Radien-Anmutung über Schatten/Bord */
+    body.theme-voltlogik .bg-white.rounded-xl,
+    body.theme-voltlogik .bg-white.rounded-2xl {
+      border: 1px solid var(--vl-line);
+      box-shadow: 0 1px 2px rgba(20, 32, 44, 0.04);
+    }
+    body.theme-voltlogik .shadow-sm { box-shadow: 0 1px 2px rgba(20, 32, 44, 0.04); }
+    body.theme-voltlogik .shadow,
+    body.theme-voltlogik .shadow-lg,
+    body.theme-voltlogik .shadow-xl,
+    body.theme-voltlogik .shadow-2xl {
+      box-shadow: 0 12px 32px -18px rgba(20, 32, 44, 0.25), 0 1px 2px rgba(20, 32, 44, 0.04);
+    }
+
+    /* Markdown-Inhalt: Links auf Kupfer */
+    body.theme-voltlogik .markdown-content a { color: var(--vl-copper); }
+    body.theme-voltlogik .markdown-content a:hover { color: var(--vl-copper-dark); }
+
+    /* Hero-Grid auf Upload-Screen (dezent) */
+    body.theme-voltlogik > div:not(header) > .flex-1.flex.items-center.justify-center {
+      position: relative;
+      isolation: isolate;
+    }
+    body.theme-voltlogik > div:not(header) > .flex-1.flex.items-center.justify-center::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, var(--vl-line-soft) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--vl-line-soft) 1px, transparent 1px);
+      background-size: 56px 56px;
+      -webkit-mask-image: radial-gradient(ellipse at 70% 30%, #000 0%, transparent 65%);
+              mask-image: radial-gradient(ellipse at 70% 30%, #000 0%, transparent 65%);
+      opacity: 0.55;
+      z-index: -1;
+    }
+
+    /* Kupfer-Akzent vor Projektüberschrift im Header (vertikale Linie) */
+    body.theme-voltlogik > div > header h1.text-lg {
+      border-left: 3px solid var(--vl-copper);
+      padding-left: 0.75rem;
+      letter-spacing: -0.01em;
+    }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen" x-data="app()" x-cloak>
+<body class="bg-gray-100 min-h-screen" :class="{ 'theme-voltlogik': theme === 'voltlogik' }" x-data="app()" x-cloak>
 
 <!-- ===== INITIALIZING SPINNER ===== -->
 <div x-show="initializing" class="flex items-center justify-center min-h-screen">
@@ -307,6 +454,25 @@
               <span class="block text-xs text-gray-400 mt-0.5">Kommunikationsobjekte enthalten GA-Name und Beschreibung</span>
             </span>
           </label>
+        </div>
+
+        <!-- Design / Theme (beide Modi) -->
+        <div class="mt-5 pt-4 border-t border-gray-200">
+          <h4 class="text-sm font-semibold text-gray-700 mb-3">Design</h4>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Erscheinungsbild</label>
+          <select x-model="theme" @change="setTheme(theme)"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="default">Standard (Tailwind)</option>
+            <option value="voltlogik">Volt &amp; Logik (Anthrazit · Kupfer)</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            Lokale Wahl im Browser hat Vorrang. Server-Vorgabe per ENV
+            <code class="font-mono">OPENKNXVIEWER_THEME</code>.
+          </p>
+          <button x-show="themeUserChosen" @click="resetThemeToServerDefault()"
+                  class="mt-2 text-xs text-gray-500 hover:text-gray-800 underline">
+            Auf Server-Vorgabe zurücksetzen
+          </button>
         </div>
 
         <div class="flex gap-2 mt-5">
@@ -1722,6 +1888,10 @@ function app() {
     language: '',
     project: null,
     publicMode: false,
+    // UI theme — 'default' (Tailwind-Standard) | 'voltlogik' (Anthrazit + Kupfer)
+    // Reihenfolge: localStorage (explizite User-Wahl) → Server-Default (ENV OPENKNXVIEWER_THEME) → 'default'
+    theme: (typeof localStorage !== 'undefined' && localStorage.getItem('openknxviewer-theme')) || 'default',
+    themeUserChosen: (typeof localStorage !== 'undefined' && !!localStorage.getItem('openknxviewer-theme')),
     demoAvailable: false,
     lastProjectFilename: '',
     recentProjects: [],
@@ -1864,6 +2034,11 @@ function app() {
         const res = await fetch('/api/mode');
         const mode = await res.json();
         this.publicMode = mode.public ?? false;
+        // Server-Default-Theme (aus ENV OPENKNXVIEWER_THEME) nur dann übernehmen,
+        // wenn der User lokal noch keine eigene Wahl getroffen hat.
+        if (!this.themeUserChosen && mode.default_theme) {
+          this.theme = (mode.default_theme === 'voltlogik') ? 'voltlogik' : 'default';
+        }
       } catch (_) { /* default false */ }
       document.title = 'Open-KNXViewer';
       if (!this.publicMode) {
@@ -1886,6 +2061,24 @@ function app() {
         }
       });
       this.initializing = false;
+    },
+
+    setTheme(t) {
+      this.theme = (t === 'voltlogik') ? 'voltlogik' : 'default';
+      this.themeUserChosen = true;
+      try { localStorage.setItem('openknxviewer-theme', this.theme); } catch (_) {}
+    },
+
+    async resetThemeToServerDefault() {
+      try { localStorage.removeItem('openknxviewer-theme'); } catch (_) {}
+      this.themeUserChosen = false;
+      try {
+        const res = await fetch('/api/mode');
+        const mode = await res.json();
+        this.theme = (mode.default_theme === 'voltlogik') ? 'voltlogik' : 'default';
+      } catch (_) {
+        this.theme = 'default';
+      }
     },
 
     async loadAnnotations() {
