@@ -53,7 +53,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
@@ -63,7 +62,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "img-src 'self' data:; "
             "connect-src 'self' https://cdn.tailwindcss.com; "
             "font-src 'self' data:; "
-            "frame-ancestors 'none';"
+            "frame-ancestors https://volt-logik.io;"
         )
         return response
 
