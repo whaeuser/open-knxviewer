@@ -13,4 +13,3 @@ services:
       - ./logs:/app/logs
     environment:
       - TZ=Europe/Berlin
-      - OPENKNXVIEWER_THEME=voltlogik

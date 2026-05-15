@@ -581,10 +581,14 @@ async def chrome_devtools():
 
 
 @app.get("/api/mode")
-def get_mode():
-    theme = os.environ.get("OPENKNXVIEWER_THEME", "default").strip().lower()
-    if theme not in ("default", "voltlogik"):
-        theme = "default"
+def get_mode(request: Request):
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    if "volt-logik" in host:
+        theme = "voltlogik"
+    else:
+        theme = os.environ.get("OPENKNXVIEWER_THEME", "default").strip().lower()
+        if theme not in ("default", "voltlogik"):
+            theme = "default"
     return {"public": False, "default_theme": theme}
 
 
