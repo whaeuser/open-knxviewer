@@ -89,6 +89,10 @@
     body.theme-voltlogik .bg-blue-600:hover,
     body.theme-voltlogik .hover\:bg-blue-700:hover { background-color: var(--vl-copper); }
 
+    body.theme-voltlogik .bg-orange-500 { background-color: var(--vl-copper); }
+    body.theme-voltlogik .bg-orange-500:hover,
+    body.theme-voltlogik .hover\:bg-orange-600:hover { background-color: var(--vl-copper-dark); }
+
     /* Akzent-Texte: Kupfer statt Blau */
     body.theme-voltlogik .text-blue-600 { color: var(--vl-copper); }
     body.theme-voltlogik .hover\:text-blue-600:hover { color: var(--vl-copper); }
@@ -319,7 +323,7 @@
         Zuletzt: <span x-text="lastProjectFilename"></span>
       </button>
       <button x-show="publicMode && demoAvailable && !loading" @click="loadDemo()"
-        class="mt-3 w-full text-sm font-medium text-white bg-green-600 hover:bg-green-700 py-2.5 rounded-lg transition-colors">
+        class="mt-3 w-full text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 py-2.5 rounded-lg transition-colors">
         Demo laden
       </button>
       <button x-show="!publicMode" @click="skipToMonitor()"
