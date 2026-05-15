@@ -29,6 +29,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from xknx import XKNX
 from xknx.dpt import DPTArray, DPTBase, DPTBinary
@@ -573,6 +574,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Open-KNXViewer", lifespan=lifespan)
+
+
+class FrameAncestorsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors https://volt-logik.io https://*.volt-logik.io;"
+        )
+        return response
+
+
+app.add_middleware(FrameAncestorsMiddleware)
 
 
 @app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
