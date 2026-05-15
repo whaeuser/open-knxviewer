@@ -180,8 +180,8 @@
 <body class="bg-gray-100 min-h-screen" :class="{ 'theme-voltlogik': theme === 'voltlogik' }" x-data="app()" x-cloak>
 
 <!-- ===== VOLT-LOGIK SITE HEADER ===== -->
-<div x-show="voltlogikBranding && !initializing" style="background:#14202C;border-bottom:1px solid #2A3645;">
-  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+<div x-show="voltlogikBranding && !initializing" style="background:#fff;border-bottom:1px solid #E5E7EB;">
+  <div class="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
     <a href="https://volt-logik.io" class="flex items-center gap-2.5">
       <img src="https://volt-logik.io/assets/img/bildmarke.png" alt="" class="h-7 w-auto">
       <img src="https://volt-logik.io/assets/img/textmarke.png" alt="Weyerhäuser Volt &amp; Logik" class="h-5 w-auto">
@@ -1888,11 +1888,12 @@
 </div>
 
 <!-- ===== VOLT-LOGIK SITE FOOTER ===== -->
-<footer x-show="voltlogikBranding" style="background:#14202C;border-top:1px solid #2A3645;">
-  <div class="max-w-7xl mx-auto px-4 py-3">
-    <p class="text-sm" style="color:#8A9BB0;">
+<footer x-show="voltlogikBranding" style="position:fixed;bottom:0;left:0;right:0;z-index:40;background:rgba(20,32,44,0.95);border-top:1px solid #2A3645;">
+  <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
+    <p class="text-xs" style="color:#8A9BB0;">
       <strong style="color:#D4CCC6;">Weyerhäuser Volt &amp; Logik</strong> · Strom mit System.
     </p>
+    <a href="https://volt-logik.io" style="color:#E97A38;" class="text-xs hover:opacity-80">volt-logik.io ↗</a>
   </div>
 </footer>
 
