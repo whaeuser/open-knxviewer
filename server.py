@@ -588,9 +588,15 @@ class FrameAncestorsMiddleware(BaseHTTPMiddleware):
 app.add_middleware(FrameAncestorsMiddleware)
 
 
+_FAVICON = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000a49444154789c6360000000020001e221bc330000000049454e44ae426082"
+)
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    return FileResponse(Path(__file__).parent / "favicon.ico", media_type="image/x-icon")
+    return Response(content=_FAVICON, media_type="image/png")
 
 
 @app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
