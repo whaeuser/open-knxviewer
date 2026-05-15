@@ -585,11 +585,13 @@ def get_mode(request: Request):
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
     if "volt-logik" in host:
         theme = "voltlogik"
+        branding = "voltlogik"
     else:
         theme = os.environ.get("OPENKNXVIEWER_THEME", "default").strip().lower()
         if theme not in ("default", "voltlogik"):
             theme = "default"
-    return {"public": False, "default_theme": theme}
+        branding = None
+    return {"public": False, "default_theme": theme, "branding": branding}
 
 
 @app.get("/")
