@@ -62,7 +62,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "img-src 'self' data:; "
             "connect-src 'self' https://cdn.tailwindcss.com; "
             "font-src 'self' data:; "
-            "frame-ancestors https://volt-logik.io;"
+            "frame-ancestors https://volt-logik.io https://*.volt-logik.io;"
         )
         return response
 
