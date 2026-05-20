@@ -580,7 +580,7 @@ class FrameAncestorsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
-            "frame-ancestors https://volt-logik.io https://*.volt-logik.io;"
+            "frame-ancestors https://volt-logik.io https://*.volt-logik.io https://portal.nurdaheim.net https://*.nurdaheim.net;"
         )
         return response
 
