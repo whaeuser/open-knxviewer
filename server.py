@@ -1760,6 +1760,20 @@ def _build_project_summary(project_data: dict) -> str:
     return "\n".join(lines)
 
 
+@app.get("/api/llm/lmstudio/models")
+async def lmstudio_models():
+    """Return models loaded in LM Studio. 'local-model' is always first."""
+    def _fetch():
+        try:
+            resp = httpx.get("http://localhost:1234/v1/models", timeout=3)
+            ids = [m["id"] for m in resp.json().get("data", [])
+                   if "embedding" not in m["id"].lower()]
+            return {"available": True, "models": ["local-model"] + ids}
+        except Exception:
+            return {"available": False, "models": []}
+    return await asyncio.to_thread(_fetch)
+
+
 @app.get("/api/llm/config")
 def get_llm_config():
     cfg = load_config()
