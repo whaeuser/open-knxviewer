@@ -1696,6 +1696,23 @@ async def wg_teardown():
 
 LLM_DEFAULT_MODEL = "z-ai/glm-5"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
+
+
+def _is_local_model(model: str) -> bool:
+    return model == "local-model" or model.startswith("lm:")
+
+
+def _resolve_llm_target(model: str, api_key: str) -> tuple[str, dict, str]:
+    """Return (url, headers, actual_model) for the configured model."""
+    if _is_local_model(model):
+        actual = model[3:] if model.startswith("lm:") else model
+        return LM_STUDIO_URL, {"Content-Type": "application/json"}, actual
+    return (
+        OPENROUTER_URL,
+        {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        model,
+    )
 
 
 def _build_project_summary(project_data: dict) -> str:
@@ -1747,9 +1764,10 @@ def _build_project_summary(project_data: dict) -> str:
 def get_llm_config():
     cfg = load_config()
     key = cfg.get("openrouter_api_key", "")
+    model = cfg.get("llm_model", LLM_DEFAULT_MODEL)
     return {
-        "configured": bool(key),
-        "model": cfg.get("llm_model", LLM_DEFAULT_MODEL),
+        "configured": bool(key) or _is_local_model(model),
+        "model": model,
     }
 
 
@@ -1777,7 +1795,7 @@ async def llm_analyze(data: dict):
         "history", []
     )  # List of {role: "user"|"assistant", content: str}
 
-    if not api_key:
+    if not api_key and not _is_local_model(model):
         raise HTTPException(
             status_code=400, detail="OpenRouter API-Key nicht konfiguriert"
         )
@@ -1818,16 +1836,15 @@ async def llm_analyze(data: dict):
         # Add current question
         messages.append({"role": "user", "content": question})
 
+    url, headers, actual_model = _resolve_llm_target(model, api_key)
+
     async def stream_llm():
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream(
                 "POST",
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": model, "messages": messages, "stream": True},
+                url,
+                headers=headers,
+                json={"model": actual_model, "messages": messages, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -1848,7 +1865,7 @@ async def llm_compare(data: dict):
     diff_text = data.get("diff_text", "").strip()
     name_a = data.get("name_a", "Projekt A")
     name_b = data.get("name_b", "Projekt B")
-    if not api_key:
+    if not api_key and not _is_local_model(model):
         raise HTTPException(
             status_code=400, detail="OpenRouter API-Key nicht konfiguriert"
         )
@@ -1872,16 +1889,15 @@ async def llm_compare(data: dict):
         },
     ]
 
+    url, headers, actual_model = _resolve_llm_target(model, api_key)
+
     async def stream_llm():
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream(
                 "POST",
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": model, "messages": messages, "stream": True},
+                url,
+                headers=headers,
+                json={"model": actual_model, "messages": messages, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()

@@ -28,7 +28,7 @@ INDEX_HTML = Path(__file__).parent / "index.html"
 DEMO_PATH = Path(__file__).parent / "demo.knxproj"
 ACCESS_LOG = Path(__file__).parent / "logs" / "access_public.log"
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 # IPs, die nicht ins Access-Log geschrieben werden (z.B. Monitoring)
 ACCESS_LOG_SKIP_IPS = {"172.18.0.1"}
@@ -58,11 +58,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; "
             "img-src 'self' data:; "
             "connect-src 'self' https://cdn.tailwindcss.com; "
-            "font-src 'self' data:; "
-            "frame-ancestors https://volt-logik.io https://*.volt-logik.io;"
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "frame-ancestors https://volt-logik.io https://*.volt-logik.io https://portal.nurdaheim.net https://*.nurdaheim.net;"
         )
         return response
 

@@ -277,6 +277,16 @@
     <div class="bg-white rounded-2xl shadow-lg p-10 w-full max-w-lg">
       <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center" x-text="'Open-KNXViewer'">Open-KNXViewer</h1>
 
+      <!-- Error (above drop zone for visibility) -->
+      <div x-show="error" x-transition
+           class="mb-4 bg-red-50 border-2 border-red-300 rounded-lg px-4 py-3 text-sm text-red-800 font-medium flex items-start gap-2">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span x-text="error"></span>
+      </div>
+
       <!-- Drop zone -->
       <div
         class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
@@ -301,9 +311,6 @@
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
         </div>
       </div>
-
-      <!-- Error -->
-      <div x-show="error" class="mt-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700" x-text="error"></div>
 
       <!-- Submit -->
       <button
@@ -525,7 +532,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Modell</label>
-            <input x-model="llmModel" type="text" placeholder="z-ai/glm-5"
+            <input x-model="llmModel" type="text" placeholder="z-ai/glm-5 oder local-model"
                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
           </div>
           <button @click="saveLlmConfig()"
@@ -2589,7 +2596,8 @@ function app() {
           body: JSON.stringify({ api_key: this.llmApiKey, model: this.llmModel }),
         });
         if (res.ok) {
-          this.llmConfigured = !!this.llmApiKey;
+          const isLocal = this.llmModel === 'local-model' || this.llmModel.startsWith('lm:');
+          this.llmConfigured = !!this.llmApiKey || isLocal;
           this.llmApiKey = '';
           this.showGatewayConfig = false;
         }
@@ -2980,7 +2988,12 @@ function app() {
         const res = await fetch('/api/parse', { method: 'POST', body: form });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }));
-          this.error = err.detail ?? 'Unbekannter Fehler';
+          const sizeMb = (this.selectedFile.size / (1024 * 1024)).toFixed(1);
+          if (res.status === 413) {
+            this.error = `Datei zu groß (${sizeMb} MB). Der Server oder ein vorgeschalteter Proxy lehnt sie ab.`;
+          } else {
+            this.error = (err.detail ?? 'Unbekannter Fehler') + ` (HTTP ${res.status}, Datei: ${sizeMb} MB)`;
+          }
           return;
         }
         this.project = await res.json();
