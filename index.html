@@ -732,15 +732,40 @@
     </div>
 
     <!-- Tabs -->
-    <div class="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
-      <template x-for="tab in visibleTabs" :key="tab.id">
+    <div class="max-w-7xl mx-auto px-4 flex items-stretch">
+      <div class="flex gap-1 overflow-x-auto flex-1 min-w-0">
+        <template x-for="tab in mainTabs" :key="tab.id">
+          <button
+            @click="activeTab = tab.id; toolsMenuOpen = false"
+            :class="activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+            class="px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
+            x-text="tab.label"
+          ></button>
+        </template>
+      </div>
+
+      <!-- Tools dropdown (outside the scroll container) -->
+      <div x-show="toolsTabs.length > 0" class="relative shrink-0" @click.outside="toolsMenuOpen = false">
         <button
-          @click="activeTab = tab.id"
-          :class="activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'"
-          class="px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
-          x-text="tab.label"
-        ></button>
-      </template>
+          @click="toolsMenuOpen = !toolsMenuOpen"
+          :class="isToolsActive ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+          class="px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1">
+          <span x-text="isToolsActive ? ('Tools: ' + (activeToolLabel || '')) : 'Tools'"></span>
+          <span class="text-xs" x-text="toolsMenuOpen ? '▴' : '▾'"></span>
+        </button>
+        <div x-show="toolsMenuOpen" x-transition
+             class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30 min-w-[180px]"
+             style="display:none">
+          <template x-for="tab in toolsTabs" :key="tab.id">
+            <button
+              @click="activeTab = tab.id; toolsMenuOpen = false"
+              :class="activeTab === tab.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'"
+              class="w-full text-left px-4 py-2 text-sm whitespace-nowrap"
+              x-text="tab.label"
+            ></button>
+          </template>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -2201,6 +2226,8 @@ function app() {
     notesModalTitle: '',
     notesModalText: '',
     activeTab: 'info',
+    toolsMenuOpen: false,
+    toolsGroupIds: ['communication', 'bus_scan', 'compare', 'snapshots'],
     tabs: [
       { id: 'info', label: 'Info' },
       { id: 'devices', label: 'Geräte' },
@@ -3228,6 +3255,30 @@ function app() {
         if (tab.id === 'snapshots') return !this.publicMode && !!this.project;
         return true;
       });
+    },
+
+    get _visibleToolTabs() {
+      return this.visibleTabs.filter(t => this.toolsGroupIds.includes(t.id));
+    },
+
+    // If only one tool tab is visible (e.g. public mode shows just "Graph"),
+    // promote it back to the main bar so the dropdown isn't a 1-item menu.
+    get mainTabs() {
+      if (this._visibleToolTabs.length <= 1) return this.visibleTabs;
+      return this.visibleTabs.filter(t => !this.toolsGroupIds.includes(t.id));
+    },
+
+    get toolsTabs() {
+      return this._visibleToolTabs.length <= 1 ? [] : this._visibleToolTabs;
+    },
+
+    get isToolsActive() {
+      return this.toolsTabs.some(t => t.id === this.activeTab);
+    },
+
+    get activeToolLabel() {
+      const t = this.toolsTabs.find(t => t.id === this.activeTab);
+      return t ? t.label : '';
     },
 
     async scanProgMode() {
