@@ -1831,8 +1831,8 @@
         <!-- Input Area -->
         <div class="flex gap-2">
           <input x-model="llmQuestion" type="text"
-                 :placeholder="llmMessages.length === 0 
-                    ? 'Frage stellen, z.B. &quot;Erkläre die Topologie&quot; …' 
+                 :placeholder="llmMessages.length === 0
+                    ? 'Frage stellen, z.B. &quot;Erkläre die Topologie&quot; …'
                     : 'Folgefrage stellen…'"
                  @keydown.enter="analyzeLlm()"
                  class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
@@ -1841,6 +1841,18 @@
             <span x-show="!llmLoading">Senden</span>
             <span x-show="llmLoading">…</span>
           </button>
+        </div>
+        <div class="mt-2 flex items-center gap-2 text-xs text-gray-600 flex-wrap">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="llmIncludeBus" class="accent-blue-500">
+            <span>Bus-Aktivität einbeziehen — letzte</span>
+          </label>
+          <input type="number" x-model.number="llmBusLimit" min="1" max="500" step="10"
+                 :disabled="!llmIncludeBus"
+                 class="w-16 border border-gray-300 rounded px-1.5 py-0.5 text-xs disabled:opacity-50 disabled:bg-gray-50" />
+          <span :class="llmIncludeBus ? 'text-gray-600' : 'text-gray-400'">
+            Telegramme <span class="text-gray-400">(mehr Kontext, mehr Tokens; Puffer max. 500)</span>
+          </span>
         </div>
         <p x-show="llmError" x-text="llmError" class="mt-2 text-sm text-red-600"></p>
 
@@ -2305,6 +2317,8 @@ function app() {
     llmLoading: false,
     llmError: '',
     llmMessages: [],  // Chat history: [{role: 'user'|'assistant', content: string}]
+    llmIncludeBus: false,
+    llmBusLimit: 100,
 
     // Projektvergleich
     compareSlug: null,
@@ -3006,9 +3020,11 @@ function app() {
         const res = await fetch('/api/llm/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             question: currentQuestion,
-            history: this.llmMessages
+            history: this.llmMessages,
+            include_bus_activity: this.llmIncludeBus,
+            bus_limit: this.llmBusLimit,
           }),
         });
         if (!res.ok) {

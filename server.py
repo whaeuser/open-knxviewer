@@ -2017,6 +2017,25 @@ def _resolve_llm_target(model: str, api_key: str) -> tuple[str, dict, str]:
     )
 
 
+def _build_bus_activity_summary(limit: int = 100) -> str:
+    """Compact list of the most recent telegrams for LLM context."""
+    buf = list(state.get("telegram_buffer") or [])
+    if not buf:
+        return "(Keine Bus-Telegramme im Puffer)"
+    recent = buf[-limit:]
+    lines = [f"Letzte {len(recent)} Bus-Telegramme (älteste zuerst):"]
+    for e in recent:
+        ts = (e.get("ts") or "").split(" ")[-1]  # just HH:MM:SS(.ms)
+        src = e.get("src") or "?"
+        ga = e.get("ga") or "?"
+        ga_name = e.get("ga_name") or ""
+        apci = e.get("apci") or ""
+        value = e.get("value") if e.get("value") not in (None, "") else "-"
+        ga_part = f"{ga} ({ga_name})" if ga_name else ga
+        lines.append(f"  {ts}  {apci:<1}  {src} → {ga_part} = {value}")
+    return "\n".join(lines)
+
+
 def _build_project_summary(project_data: dict) -> str:
     """Build a compact text summary of a KNX project for LLM context."""
     lines = []
@@ -2110,6 +2129,8 @@ async def llm_analyze(data: dict):
     history = data.get(
         "history", []
     )  # List of {role: "user"|"assistant", content: str}
+    include_bus = bool(data.get("include_bus_activity"))
+    bus_limit = int(data.get("bus_limit") or 100)
 
     if not api_key and not _is_local_model(model):
         raise HTTPException(
@@ -2119,6 +2140,9 @@ async def llm_analyze(data: dict):
         raise HTTPException(status_code=400, detail="Kein Projekt geladen")
 
     summary = _build_project_summary(state["project_data"])
+    bus_section = ""
+    if include_bus:
+        bus_section = "\n\n## Bus-Aktivität\n" + _build_bus_activity_summary(bus_limit)
     messages = [
         {
             "role": "system",
@@ -2135,7 +2159,7 @@ async def llm_analyze(data: dict):
         messages.append(
             {
                 "role": "user",
-                "content": f"Projektdaten:\n\n{summary}\n\nFrage: {question}",
+                "content": f"Projektdaten:\n\n{summary}{bus_section}\n\nFrage: {question}",
             }
         )
     else:
@@ -2143,7 +2167,7 @@ async def llm_analyze(data: dict):
         messages.append(
             {
                 "role": "user",
-                "content": f"Projektdaten:\n\n{summary}\n\nBeantworte Fragen zu diesem Projekt.",
+                "content": f"Projektdaten:\n\n{summary}{bus_section}\n\nBeantworte Fragen zu diesem Projekt.",
             }
         )
         # Add conversation history
