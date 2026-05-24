@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -27,6 +28,7 @@ from xknxproject.exceptions import InvalidPasswordException, XknxProjectExceptio
 from xknxproject.zip.extractor import extract as knxproj_extract
 
 INDEX_HTML = Path(__file__).parent / "index.html"
+STATIC_DIR = Path(__file__).parent / "static"
 DEMO_PATH = Path(__file__).parent / "demo.knxproj"
 ACCESS_LOG = Path(__file__).parent / "logs" / "access_public.log"
 
@@ -59,10 +61,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://fonts.googleapis.com; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com; "
             "img-src 'self' data:; "
-            "connect-src 'self' https://cdn.tailwindcss.com; "
+            "connect-src 'self'; "
             "font-src 'self' data: https://fonts.gstatic.com; "
             "frame-ancestors https://volt-logik.io https://*.volt-logik.io https://portal.nurdaheim.net https://*.nurdaheim.net;"
         )
@@ -86,6 +88,9 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AccessLogMiddleware)
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _demo_cache = None
 

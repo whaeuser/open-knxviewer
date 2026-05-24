@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir \
 # Anwendung kopieren
 COPY server_public.py .
 COPY index.html .
+COPY static/ ./static/
 
 # Log-Verzeichnis anlegen
 RUN mkdir -p logs

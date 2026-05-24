@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .tab-active {
+    @apply border-b-2 border-blue-600 text-blue-600;
+  }
+}

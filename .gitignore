@@ -12,3 +12,4 @@ config.json
 .venv-proxy/
 *.knxproj
 *_decrypted.xml
+bin/tailwindcss

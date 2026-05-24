@@ -59,8 +59,70 @@ cmd_setup() {
     echo "==> Installiere Abhängigkeiten …"
     "$VENV_DIR/bin/pip" install --upgrade pip --quiet
     "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt" --quiet
+    _ensure_tailwind_cli
+    _build_css
     echo ""
     echo "Fertig! Server starten mit:  ./openknxviewer start"
+}
+
+# ── tailwind build ────────────────────────────────────────────────────────────
+TAILWIND_VERSION="v3.4.17"
+TAILWIND_BIN="$SCRIPT_DIR/bin/tailwindcss"
+
+_ensure_tailwind_cli() {
+    if [[ -x "$TAILWIND_BIN" ]]; then
+        return 0
+    fi
+    local os arch target
+    os=$(uname -s)
+    arch=$(uname -m)
+    case "$os" in
+        Darwin)
+            case "$arch" in
+                arm64|aarch64) target="macos-arm64" ;;
+                x86_64)        target="macos-x64"   ;;
+                *) echo "Unbekannte macOS-Architektur: $arch" >&2; return 1 ;;
+            esac
+            ;;
+        Linux)
+            case "$arch" in
+                aarch64|arm64) target="linux-arm64" ;;
+                x86_64)        target="linux-x64"   ;;
+                *) echo "Unbekannte Linux-Architektur: $arch" >&2; return 1 ;;
+            esac
+            ;;
+        *) echo "Tailwind-CLI: OS $os nicht unterstützt — bitte manuell installieren." >&2; return 1 ;;
+    esac
+    mkdir -p "$SCRIPT_DIR/bin"
+    local url="https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-${target}"
+    echo "==> Lade Tailwind-CLI (${TAILWIND_VERSION}, ${target}) …"
+    curl -fsSL -o "$TAILWIND_BIN" "$url"
+    chmod +x "$TAILWIND_BIN"
+}
+
+_build_css() {
+    local mode="${1:-once}"
+    if [[ ! -x "$TAILWIND_BIN" ]]; then
+        _ensure_tailwind_cli || return 1
+    fi
+    local in="$SCRIPT_DIR/static/tailwind-input.css"
+    local out="$SCRIPT_DIR/static/tailwind.css"
+    local cfg="$SCRIPT_DIR/tailwind.config.js"
+    if [[ "$mode" == "watch" ]]; then
+        echo "==> Tailwind-Watch (Strg-C zum Beenden) …"
+        "$TAILWIND_BIN" -c "$cfg" -i "$in" -o "$out" --watch
+    else
+        echo "==> Baue Tailwind-CSS → static/tailwind.css …"
+        "$TAILWIND_BIN" -c "$cfg" -i "$in" -o "$out" --minify
+    fi
+}
+
+cmd_build_css() {
+    local mode="once"
+    if [[ "${1:-}" == "--watch" || "${1:-}" == "-w" ]]; then
+        mode="watch"
+    fi
+    _build_css "$mode"
 }
 
 # ── start ─────────────────────────────────────────────────────────────────────
@@ -509,6 +571,7 @@ usage() {
     echo "  test   [-v] [-k AUSDRUCK]                   Tests ausführen
   update                                      Alle Pakete aktualisieren"
     echo "  stats  [--html] [--output DATEI]            Access-Log mit GoAccess auswerten"
+    echo "  build-css [--watch]                         Tailwind-CSS bauen (statisch, ohne CDN)"
     echo "  autostart          [--public] [--theme T]   macOS LaunchAgent installieren (T: default|voltlogik)"
     echo "  autostart --remove [--public]               macOS LaunchAgent entfernen"
 }
@@ -524,6 +587,7 @@ case "${1:-}" in
     test)      shift; cmd_test      "$@" ;;
     update)    shift; cmd_update    "$@" ;;
     stats)     shift; cmd_stats     "$@" ;;
+    build-css) shift; cmd_build_css "$@" ;;
     autostart) shift; cmd_autostart "$@" ;;
     *)         usage; exit 1 ;;
 esac

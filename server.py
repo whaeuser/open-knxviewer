@@ -29,6 +29,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from xknx import XKNX
@@ -42,6 +43,7 @@ from xknxproject.exceptions import InvalidPasswordException, XknxProjectExceptio
 from xknxproject.zip.extractor import extract as knxproj_extract
 
 INDEX_HTML = Path(__file__).parent / "index.html"
+STATIC_DIR = Path(__file__).parent / "static"
 CONFIG_PATH = Path(__file__).parent / "config.json"
 ANNOTATIONS_PATH = Path(__file__).parent / "annotations.json"
 LOG_PATH = Path(__file__).parent / "logs" / "knx_bus.log"
@@ -586,6 +588,9 @@ class FrameAncestorsMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(FrameAncestorsMiddleware)
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 _FAVICON = bytes.fromhex(
