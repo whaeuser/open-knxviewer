@@ -1516,8 +1516,8 @@
     </div>
 
     <!-- BUS MONITOR TAB -->
-    <div x-show="activeTab === 'bus_monitor'">
-      <div class="flex items-center gap-3 mb-4 flex-wrap">
+    <div x-show="activeTab === 'bus_monitor'" class="flex flex-col" style="height: calc(100vh - 150px); min-height: 320px">
+      <div class="flex items-center gap-3 mb-4 flex-wrap shrink-0">
         <h2 class="text-lg font-semibold text-gray-700 mr-2">Bus-Monitor</h2>
         <input x-model="liveLogFilter" type="search" placeholder="Filter (GA, Gerät, Wert, PA)…"
                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
@@ -1537,8 +1537,8 @@
         </span>
       </div>
 
-      <div class="bg-white rounded-xl shadow overflow-hidden">
-        <div class="overflow-auto max-h-[60vh]">
+      <div class="bg-white rounded-xl shadow overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div class="overflow-auto flex-1 min-h-0">
           <table class="w-full text-sm font-mono">
             <thead class="sticky top-0 bg-gray-50 text-gray-500 uppercase text-xs z-10">
               <tr>
