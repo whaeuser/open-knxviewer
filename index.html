@@ -1177,6 +1177,7 @@
               <th class="px-4 py-3 text-left">DPT</th>
               <th class="px-4 py-3 text-left">Beschreibung</th>
               <th x-show="!publicMode" class="px-4 py-3 text-left">Letzter Wert</th>
+              <th x-show="!publicMode" class="px-4 py-3 text-left" title="Letzte Telegramme als Mini-Graph">Aktivität</th>
               <th x-show="!publicMode" class="px-4 py-3 text-left">Senden</th>
               <th class="px-4 py-3 text-left">Verknüpfte KOs</th>
             </tr>
@@ -1196,6 +1197,9 @@
                           x-text="currentValues[ga.address]?.value"></span>
                   </template>
                   <span x-show="!currentValues[ga.address]" class="text-gray-300 text-sm">—</span>
+                </td>
+                <td x-show="!publicMode" class="px-4 py-3" :title="sparkTooltip(ga.address)">
+                  <span x-html="renderSparkline(ga.address)"></span>
                 </td>
                 <!-- Write / Read controls — only for known DPT -->
                 <td x-show="!publicMode" class="px-4 py-3">
@@ -2107,6 +2111,10 @@ function app() {
     searchQuery: '',
     searchIndex: 0,
 
+    // GA activity sparkline buffer: { [ga]: [{ts, num, bool}] }
+    gaHistory: {},
+    gaHistoryMax: 50,
+
     // LLM
     llmApiKey: '',
     llmModel: 'z-ai/glm-5',
@@ -2469,8 +2477,10 @@ function app() {
           this.currentValues = msg.values;
         } else if (msg.type === 'history') {
           this.liveLog = msg.entries;
+          this._rebuildGAHistory(msg.entries);
         } else if (msg.type === 'telegram') {
           this.currentValues[msg.ga] = { value: msg.value, ts: msg.ts };
+          this._pushGAHistory(msg.ga, msg.value, msg.ts);
           if (!this.liveLogPaused) {
             this.liveLog = [msg, ...this.liveLog].slice(0, 1000);
           }
@@ -4005,6 +4015,92 @@ function app() {
         deviceName: this.project?.devices?.[addr]?.name ?? addr,
         cos: cos.sort((a, b) => (a.number ?? 0) - (b.number ?? 0)),
       }));
+    },
+
+    // ── GA activity sparkline ─────────────────────────────
+    _parseValueForSpark(value) {
+      if (value == null) return { num: null, bool: null };
+      const s = String(value).trim();
+      const lower = s.toLowerCase();
+      if (lower === 'ein' || lower === 'on'  || lower === 'true'  || lower === '1') return { num: 1, bool: 1 };
+      if (lower === 'aus' || lower === 'off' || lower === 'false' || lower === '0') return { num: 0, bool: 0 };
+      const m = s.match(/-?\d+(?:[.,]\d+)?/);
+      if (!m) return { num: null, bool: null };
+      return { num: parseFloat(m[0].replace(',', '.')), bool: null };
+    },
+
+    _pushGAHistory(ga, value, ts) {
+      const parsed = this._parseValueForSpark(value);
+      if (parsed.num == null) return;
+      const buf = this.gaHistory[ga] ? [...this.gaHistory[ga]] : [];
+      buf.push({ ts, value, ...parsed });
+      if (buf.length > this.gaHistoryMax) buf.shift();
+      this.gaHistory = { ...this.gaHistory, [ga]: buf };
+    },
+
+    _rebuildGAHistory(entries) {
+      const map = {};
+      // entries arrive newest-first; iterate reverse to keep chronological order
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (!e || !e.ga) continue;
+        const parsed = this._parseValueForSpark(e.value);
+        if (parsed.num == null) continue;
+        if (!map[e.ga]) map[e.ga] = [];
+        map[e.ga].push({ ts: e.ts, value: e.value, ...parsed });
+        if (map[e.ga].length > this.gaHistoryMax) map[e.ga].shift();
+      }
+      this.gaHistory = map;
+    },
+
+    renderSparkline(ga) {
+      const buf = this.gaHistory[ga];
+      if (!buf || buf.length === 0) return '<span class="text-gray-300 text-xs">—</span>';
+      const W = 64, H = 18, PAD = 2;
+      const allBool = buf.every(b => b.bool != null);
+      if (buf.length === 1) {
+        const x = W / 2, y = H / 2;
+        return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><circle cx="${x}" cy="${y}" r="2.5" fill="#3b82f6"/></svg>`;
+      }
+      const xs = (i) => PAD + (i * (W - 2 * PAD)) / (buf.length - 1);
+      if (allBool) {
+        // Step line between 0 (bottom) and 1 (top)
+        let d = '';
+        for (let i = 0; i < buf.length; i++) {
+          const x = xs(i);
+          const y = buf[i].bool === 1 ? PAD + 1 : H - PAD - 1;
+          d += (i === 0 ? `M${x},${y}` : ` L${x},${y}`);
+          if (i < buf.length - 1) {
+            const nextY = buf[i + 1].bool === 1 ? PAD + 1 : H - PAD - 1;
+            const nextX = xs(i + 1);
+            if (nextY !== y) d += ` L${nextX},${y}`;
+          }
+        }
+        return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" stroke="#3b82f6" stroke-width="1.5" fill="none" stroke-linejoin="miter"/></svg>`;
+      }
+      // Numeric line graph
+      const vals = buf.map(b => b.num);
+      let min = Math.min(...vals), max = Math.max(...vals);
+      if (min === max) { min -= 1; max += 1; }
+      const ys = (v) => H - PAD - ((v - min) / (max - min)) * (H - 2 * PAD);
+      let d = '';
+      for (let i = 0; i < buf.length; i++) {
+        d += (i === 0 ? 'M' : ' L') + xs(i).toFixed(1) + ',' + ys(buf[i].num).toFixed(1);
+      }
+      return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" stroke="#3b82f6" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>`;
+    },
+
+    sparkTooltip(ga) {
+      const buf = this.gaHistory[ga];
+      if (!buf || !buf.length) return 'Noch keine Telegramme';
+      const N = 15;
+      const recent = buf.slice(-N).reverse(); // newest first
+      const lines = recent.map(e => {
+        const time = (e.ts || '').split(' ').pop() || e.ts;
+        return `${time}   ${e.value}`;
+      });
+      const head = `${buf.length} Telegramme (letzte ${recent.length}):`;
+      return [head, ...lines].join('\n');
     },
 
     // ── Global search ─────────────────────────────────────
