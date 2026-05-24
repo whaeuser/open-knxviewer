@@ -191,6 +191,53 @@
   </svg>
 </div>
 
+<!-- ===== GLOBAL SEARCH (Cmd/Ctrl-K) ===== -->
+<div x-show="searchOpen" x-transition.opacity
+     @click.self="searchOpen = false"
+     @keydown.escape.window="searchOpen = false"
+     class="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-24"
+     style="display:none">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden"
+       @click.stop>
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
+      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+      </svg>
+      <input id="global-search-input" type="search"
+             x-model="searchQuery" @input="searchIndex = 0"
+             @keydown.arrow-down.prevent="searchIndex = Math.min(searchIndex + 1, searchResults.length - 1)"
+             @keydown.arrow-up.prevent="searchIndex = Math.max(searchIndex - 1, 0)"
+             @keydown.enter.prevent="searchResults[searchIndex] && selectSearchResult(searchResults[searchIndex])"
+             placeholder="Suche über alle Tabs (Adressen, Namen, Beschreibungen)…"
+             autocomplete="off"
+             class="flex-1 outline-none text-sm">
+      <kbd class="text-[10px] text-gray-400 border border-gray-300 rounded px-1.5 py-0.5">Esc</kbd>
+    </div>
+    <div x-show="searchQuery && searchResults.length === 0" class="px-4 py-8 text-center text-sm text-gray-400">
+      Keine Treffer
+    </div>
+    <div x-show="!searchQuery" class="px-4 py-6 text-center text-xs text-gray-400">
+      Suche GAs, Geräte, Funktionen, Räume.&nbsp; <kbd class="border border-gray-300 rounded px-1">↑</kbd>
+      <kbd class="border border-gray-300 rounded px-1">↓</kbd> navigieren,
+      <kbd class="border border-gray-300 rounded px-1">↵</kbd> öffnen.
+    </div>
+    <div x-show="searchResults.length > 0" class="max-h-96 overflow-y-auto">
+      <template x-for="(r, idx) in searchResults" :key="r.type + ':' + r.payload + ':' + idx">
+        <div @click="selectSearchResult(r)" @mouseenter="searchIndex = idx"
+             :class="idx === searchIndex ? 'bg-blue-50' : 'hover:bg-gray-50'"
+             class="px-4 py-2.5 border-t border-gray-100 cursor-pointer flex items-center gap-3">
+          <span class="text-[10px] uppercase font-semibold text-gray-400 w-16 shrink-0"
+                x-text="{ga:'GA', device:'Gerät', function:'Funktion', location:'Standort'}[r.type]"></span>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm text-gray-800 truncate" x-text="r.label"></div>
+            <div class="text-xs text-gray-500 truncate" x-text="r.sub"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
 <!-- ===== UPLOAD PHASE ===== -->
 <div x-show="!initializing && phase === 'upload'" class="flex min-h-screen">
 
@@ -373,6 +420,15 @@
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
       <h1 class="text-lg font-bold text-gray-800" x-text="projectName"></h1>
       <div class="flex items-center gap-4">
+        <button x-show="project" @click="openSearch()"
+                class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-3 py-1 hover:bg-gray-50"
+                title="Globale Suche">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          <span class="hidden sm:inline">Suchen</span>
+          <kbd class="hidden sm:inline text-[10px] border border-gray-300 rounded px-1 text-gray-400" x-text="navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'"></kbd>
+        </button>
         <button @click="exportMarkdown()" class="text-sm text-gray-600 hover:text-gray-900">↓ Markdown</button>
         <button @click="exportPDF()" class="text-sm text-gray-600 hover:text-gray-900">↓ PDF</button>
         <button @click="reset()" class="text-sm text-blue-600 hover:underline">Neue Datei laden</button>
@@ -966,8 +1022,15 @@
       <div x-show="project">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-700">Geräte (<span x-text="filteredDevices.length"></span>)</h2>
-        <input x-model="deviceSearch" type="search" placeholder="Suchen…"
-          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <div class="flex items-center gap-2">
+          <button @click="exportDevicesCSV()" :disabled="!filteredDevices.length"
+                  class="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-200 disabled:opacity-40"
+                  title="Gefilterte Geräte als CSV exportieren">
+            ⬇ CSV
+          </button>
+          <input x-model="deviceSearch" type="search" placeholder="Suchen…"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
       </div>
       <div class="bg-white rounded-xl shadow overflow-x-auto">
         <table class="w-full text-sm">
@@ -1093,6 +1156,11 @@
                   class="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                   :title="readingAll ? 'Lesen läuft…' : 'Alle Werte vom Bus lesen'"
                   x-text="readingAll ? 'Lesen…' : 'Alle lesen'"></button>
+          <button @click="exportGAsCSV()" :disabled="!filteredGAs.length"
+                  class="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-200 disabled:opacity-40"
+                  title="Gefilterte Gruppenadressen als CSV exportieren">
+            ⬇ CSV
+          </button>
           <input x-model="gaSearch" type="search" placeholder="Suchen…"
             class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
         </div>
@@ -1252,8 +1320,15 @@
     <div x-show="activeTab === 'com_objects'">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-700">Kommunikationsobjekte (<span x-text="filteredCOs.length"></span>)</h2>
-        <input x-model="coSearch" type="search" placeholder="Suchen…"
-          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <div class="flex items-center gap-2">
+          <button @click="exportCOsCSV()" :disabled="!filteredCOs.length"
+                  class="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-200 disabled:opacity-40"
+                  title="Kommunikationsobjekte als CSV exportieren">
+            ⬇ CSV
+          </button>
+          <input x-model="coSearch" type="search" placeholder="Suchen…"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
       </div>
       <div class="bg-white rounded-xl shadow overflow-x-auto">
         <table class="w-full text-sm">
@@ -2024,6 +2099,11 @@ function app() {
     gaWriteValues: {},
     readingAll: false,
 
+    // Global search (Cmd-K)
+    searchOpen: false,
+    searchQuery: '',
+    searchIndex: 0,
+
     // LLM
     llmApiKey: '',
     llmModel: 'z-ai/glm-5',
@@ -2115,6 +2195,12 @@ function app() {
         this.deviceSearch = addr;
         this.activeTab = 'devices';
       };
+      window.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          this.openSearch();
+        }
+      });
       try {
         const res = await fetch('/api/mode');
         const mode = await res.json();
@@ -3916,6 +4002,133 @@ function app() {
         deviceName: this.project?.devices?.[addr]?.name ?? addr,
         cos: cos.sort((a, b) => (a.number ?? 0) - (b.number ?? 0)),
       }));
+    },
+
+    // ── Global search ─────────────────────────────────────
+    openSearch() {
+      this.searchOpen = true;
+      this.searchQuery = '';
+      this.searchIndex = 0;
+      this.$nextTick(() => document.getElementById('global-search-input')?.focus());
+    },
+
+    get searchResults() {
+      const q = this.searchQuery.trim().toLowerCase();
+      if (!q || !this.project) return [];
+      const out = [];
+      const LIMIT = 50;
+
+      for (const ga of this.allGAs ?? []) {
+        if (out.length >= LIMIT) break;
+        const dpt = ga.dpt ? (ga.dpt.main + (ga.dpt.sub != null ? '.' + String(ga.dpt.sub).padStart(3,'0') : '')) : '';
+        if ((ga.address ?? '').toLowerCase().includes(q) ||
+            (ga.name ?? '').toLowerCase().includes(q) ||
+            (ga.description ?? '').toLowerCase().includes(q)) {
+          out.push({ type: 'ga', label: ga.name || '(unbenannt)',
+                     sub: ga.address + (dpt ? ' · DPT ' + dpt : '') + (ga.description ? ' · ' + ga.description : ''),
+                     payload: ga.address });
+        }
+      }
+      for (const dev of Object.values(this.project.devices ?? {})) {
+        if (out.length >= LIMIT) break;
+        if ((dev.individual_address ?? '').toLowerCase().includes(q) ||
+            (dev.name ?? '').toLowerCase().includes(q) ||
+            (dev.manufacturer_name ?? '').toLowerCase().includes(q) ||
+            (dev.order_number ?? '').toLowerCase().includes(q)) {
+          out.push({ type: 'device', label: dev.name || '(unbenannt)',
+                     sub: dev.individual_address + ' · ' + (dev.manufacturer_name ?? ''),
+                     payload: dev.individual_address });
+        }
+      }
+      for (const fn of Object.values(this.project.functions ?? {})) {
+        if (out.length >= LIMIT) break;
+        if ((fn.name ?? '').toLowerCase().includes(q)) {
+          out.push({ type: 'function', label: fn.name, sub: fn.identifier ?? '', payload: fn.identifier });
+        }
+      }
+      const walk = (spaces) => {
+        for (const sp of Object.values(spaces ?? {})) {
+          if (out.length >= LIMIT) return;
+          if ((sp.name ?? '').toLowerCase().includes(q)) {
+            out.push({ type: 'location', label: sp.name, sub: sp.type ?? 'Standort', payload: sp.identifier });
+          }
+          walk(sp.spaces);
+        }
+      };
+      walk(this.project.locations);
+      return out;
+    },
+
+    selectSearchResult(r) {
+      this.searchOpen = false;
+      if (r.type === 'ga')         { this.gaSearch = r.payload;     this.activeTab = 'group_addresses'; }
+      else if (r.type === 'device'){ this.deviceSearch = r.payload; this.activeTab = 'devices'; }
+      else if (r.type === 'function')  { this.activeTab = 'functions'; }
+      else if (r.type === 'location')  { this.activeTab = 'locations'; }
+    },
+
+    // ── CSV export ────────────────────────────────────────
+    _csvEscape(v) {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    },
+
+    _downloadCSV(stem, rows) {
+      if (!rows.length) return;
+      const headers = Object.keys(rows[0]);
+      const lines = [headers.join(',')];
+      for (const r of rows) lines.push(headers.map(h => this._csvEscape(r[h])).join(','));
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const projectStem = (this.project?.info?.name ?? 'export').replace(/[^a-z0-9_-]+/gi, '_');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${stem}-${projectStem}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    },
+
+    exportDevicesCSV() {
+      const rows = (this.filteredDevices ?? []).map(d => ({
+        Adresse: d.individual_address,
+        Name: d.name ?? '',
+        Hersteller: d.manufacturer_name ?? '',
+        Bestellnr: d.order_number ?? '',
+        Applikation: d.application ?? '',
+        KOs: d.communication_object_ids?.length ?? 0,
+      }));
+      this._downloadCSV('geraete', rows);
+    },
+
+    exportGAsCSV() {
+      const rows = (this.filteredGAs ?? []).map(g => ({
+        Adresse: g.address,
+        Name: g.name ?? '',
+        DPT: g.dpt ? (g.dpt.main + (g.dpt.sub != null ? '.' + String(g.dpt.sub).padStart(3,'0') : '')) : '',
+        Beschreibung: g.description ?? '',
+        Verknuepfte_KOs: (g.communication_object_ids ?? []).join('; '),
+      }));
+      this._downloadCSV('group-addresses', rows);
+    },
+
+    exportCOsCSV() {
+      const rows = [];
+      for (const grp of this.cosByDevice ?? []) {
+        for (const co of grp.cos) {
+          rows.push({
+            Geraet_PA: grp.addr,
+            Geraet: grp.deviceName,
+            KO_Nr: co.number,
+            Name: co.name ?? '',
+            DPT: co.dpts?.[0] ? (co.dpts[0].main + (co.dpts[0].sub != null ? '.' + String(co.dpts[0].sub).padStart(3,'0') : '')) : '',
+            Flags: this.flagString(co),
+            Gruppenadressen: (co.group_address_links ?? []).join('; '),
+          });
+        }
+      }
+      this._downloadCSV('kommunikationsobjekte', rows);
     },
 
     renderSpace(space, depth) {
