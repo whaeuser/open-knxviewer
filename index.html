@@ -2085,6 +2085,10 @@ function app() {
     gatewayDescError: '',
 
     async init() {
+      window.__knxNavDevice = (addr) => {
+        this.deviceSearch = addr;
+        this.activeTab = 'devices';
+      };
       try {
         const res = await fetch('/api/mode');
         const mode = await res.json();
@@ -3903,6 +3907,12 @@ function app() {
         html += `</div>`;
         if (child.spaces && Object.keys(child.spaces).length > 0) {
           html += this.renderSpace(child, depth + 1);
+        }
+        if (child.devices && child.devices.length > 0) {
+          for (const addr of child.devices) {
+            const devName = this.project?.devices?.[addr]?.name ?? '';
+            html += `<div class="py-1 text-xs text-gray-700 hover:bg-blue-50 cursor-pointer" style="padding-left: ${8 + indent + 16}px" onclick="window.__knxNavDevice('${addr}')">📟 <span class="font-mono text-gray-500">${addr}</span> <span>${devName}</span></div>`;
+          }
         }
         if (child.functions && child.functions.length > 0) {
           for (const fn of child.functions) {
