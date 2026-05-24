@@ -978,6 +978,177 @@ def export_log_csv():
     )
 
 
+def _dpt_str(dpt: dict | None) -> str:
+    if not dpt or dpt.get("main") is None:
+        return ""
+    main = dpt["main"]
+    sub = dpt.get("sub")
+    return f"{main}.{str(sub).zfill(3)}" if sub is not None else str(main)
+
+
+def _flag_str(co: dict) -> str:
+    f = co.get("flags") or {}
+    out = []
+    for key, letter in (("read", "R"), ("write", "W"), ("transmit", "T"),
+                        ("update", "U"), ("communication", "C")):
+        if f.get(key):
+            out.append(letter)
+    return "".join(out)
+
+
+@app.get("/api/export/xlsx")
+def export_xlsx():
+    """Export the whole project as a multi-sheet XLSX workbook."""
+    project = state.get("project_data")
+    if not project:
+        raise HTTPException(status_code=400, detail="Kein Projekt geladen")
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="374151")
+    header_align = Alignment(vertical="center")
+
+    def add_sheet(title: str, headers: list[str], rows: list[list]) -> None:
+        ws = wb.create_sheet(title=title[:31])
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+        for r in rows:
+            ws.append(r)
+        ws.freeze_panes = "A2"
+        for col_idx, h in enumerate(headers, start=1):
+            max_len = len(str(h))
+            for r in rows:
+                v = r[col_idx - 1] if col_idx - 1 < len(r) else ""
+                if v is None:
+                    continue
+                ln = len(str(v))
+                if ln > max_len:
+                    max_len = ln
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 2, 60)
+
+    # 1) Geräte
+    dev_rows = []
+    for addr, d in (project.get("devices") or {}).items():
+        dev_rows.append([
+            addr,
+            d.get("name", ""),
+            d.get("manufacturer_name", ""),
+            d.get("order_number") or "",
+            d.get("application") or "",
+            len(d.get("communication_object_ids") or []),
+            d.get("description") or "",
+        ])
+    add_sheet("Geräte",
+              ["Adresse", "Name", "Hersteller", "Bestellnr.", "Applikation", "KO-Anzahl", "Beschreibung"],
+              dev_rows)
+
+    # 2) Gruppenadressen
+    ga_rows = []
+    for ga in (project.get("group_addresses") or {}).values():
+        ga_rows.append([
+            ga.get("address", ""),
+            ga.get("name", ""),
+            _dpt_str(ga.get("dpt")),
+            ga.get("description") or "",
+            "; ".join(ga.get("communication_object_ids") or []),
+        ])
+    add_sheet("Gruppenadressen",
+              ["Adresse", "Name", "DPT", "Beschreibung", "Verknüpfte KOs"],
+              ga_rows)
+
+    # 3) Kommunikationsobjekte
+    co_rows = []
+    for co in (project.get("communication_objects") or {}).values():
+        dev_addr = co.get("device_address", "")
+        dev = (project.get("devices") or {}).get(dev_addr, {})
+        co_rows.append([
+            dev_addr,
+            dev.get("name", ""),
+            co.get("number", ""),
+            co.get("name", ""),
+            _dpt_str((co.get("dpts") or [None])[0]),
+            _flag_str(co),
+            "; ".join(co.get("group_address_links") or []),
+        ])
+    add_sheet("Kommunikationsobjekte",
+              ["Gerät PA", "Gerät", "KO-Nr.", "Name", "DPT", "Flags", "Gruppenadressen"],
+              co_rows)
+
+    # 4) Funktionen
+    fn_rows = []
+    for fn in (project.get("functions") or {}).values():
+        gas = [v.get("address", "") for v in (fn.get("group_addresses") or {}).values()]
+        fn_rows.append([
+            fn.get("identifier", ""),
+            fn.get("name", ""),
+            fn.get("type", ""),
+            "; ".join(gas),
+        ])
+    add_sheet("Funktionen", ["ID", "Name", "Typ", "Gruppenadressen"], fn_rows)
+
+    # 5) Standorte (flach mit Pfad)
+    loc_rows = []
+    def walk(node: dict, path: list[str]) -> None:
+        for sp in (node.get("spaces") or {}).values():
+            here = path + [sp.get("name", "")]
+            loc_rows.append([
+                " / ".join(here),
+                sp.get("type", ""),
+                sp.get("usage_text") or "",
+                "; ".join(sp.get("devices") or []),
+                "; ".join(sp.get("functions") or []),
+            ])
+            walk(sp, here)
+    for top in (project.get("locations") or {}).values():
+        loc_rows.append([
+            top.get("name", ""),
+            top.get("type", ""),
+            top.get("usage_text") or "",
+            "; ".join(top.get("devices") or []),
+            "; ".join(top.get("functions") or []),
+        ])
+        walk(top, [top.get("name", "")])
+    add_sheet("Standorte", ["Pfad", "Typ", "Nutzung", "Geräte", "Funktionen"], loc_rows)
+
+    # 6) Topologie
+    topo_rows = []
+    for area_id, area in (project.get("topology") or {}).items():
+        for line_id, line in (area.get("lines") or {}).items():
+            for dev_addr in (line.get("devices") or []):
+                d = (project.get("devices") or {}).get(dev_addr, {})
+                topo_rows.append([
+                    area_id, area.get("name", ""),
+                    line_id, line.get("name", ""),
+                    dev_addr, d.get("name", ""),
+                ])
+    add_sheet("Topologie",
+              ["Bereich", "Bereichsname", "Linie", "Linienname", "Gerät PA", "Gerätename"],
+              topo_rows)
+
+    # Remove the auto-created empty default sheet
+    if "Sheet" in wb.sheetnames:
+        wb.remove(wb["Sheet"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    project_name = (project.get("info", {}).get("name") or "knx-projekt")
+    safe = _re.sub(r"[^A-Za-z0-9_-]+", "_", project_name)
+    filename = f"{safe}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()

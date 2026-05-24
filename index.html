@@ -431,6 +431,9 @@
         </button>
         <button @click="exportMarkdown()" class="text-sm text-gray-600 hover:text-gray-900">↓ Markdown</button>
         <button @click="exportPDF()" class="text-sm text-gray-600 hover:text-gray-900">↓ PDF</button>
+        <a x-show="project" href="/api/export/xlsx" download
+           class="text-sm text-gray-600 hover:text-gray-900"
+           title="Gesamtprojekt als Excel (alle Bereiche als Tabs)">↓ XLSX</a>
         <button @click="reset()" class="text-sm text-blue-600 hover:underline">Neue Datei laden</button>
         <!-- Connection indicator + settings (private mode) -->
         <span x-show="!publicMode" class="flex items-center gap-1.5 text-sm border-l pl-4">

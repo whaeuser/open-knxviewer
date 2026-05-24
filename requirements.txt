@@ -6,3 +6,4 @@ xknx
 xknxproject
 httpx
 slowapi
+openpyxl
