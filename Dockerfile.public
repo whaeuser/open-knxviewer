@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir \
     python-multipart \
     xknx \
     xknxproject \
-    slowapi
+    slowapi \
+    openpyxl
 
 # Anwendung kopieren
 COPY server_public.py .
