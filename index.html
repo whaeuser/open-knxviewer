@@ -1280,13 +1280,37 @@
               <template x-for="co in group.cos" :key="co._key">
                 <tr x-show="coSearch || expandedCODevices.has(group.addr)"
                   @click="navigateToGA(co)"
-                  :title="coGATooltip(co)"
-                  :class="co._key === highlightedCO ? 'border-t bg-yellow-100 ring-1 ring-yellow-400' : 'border-t hover:bg-blue-50 cursor-pointer'">
+                  :class="co._key === highlightedCO ? 'border-t bg-yellow-100 ring-1 ring-yellow-400 align-top' : 'border-t hover:bg-blue-50 cursor-pointer align-top'">
                   <td class="px-4 py-3 font-mono text-xs" x-text="co.number"></td>
                   <td class="px-4 py-3" x-text="co.name"></td>
-                  <td class="px-4 py-3 font-mono text-xs" :title="dptTitle(co.dpts?.[0])" x-text="co.dpts?.[0] ? (co.dpts[0].main + (co.dpts[0].sub != null ? '.' + String(co.dpts[0].sub).padStart(3,'0') : '')) : '—'"></td>
+                  <td class="px-4 py-3 font-mono text-xs">
+                    <template x-if="co.dpts?.[0]">
+                      <div>
+                        <div x-text="co.dpts[0].main + (co.dpts[0].sub != null ? '.' + String(co.dpts[0].sub).padStart(3,'0') : '')"></div>
+                        <div class="text-[10px] text-gray-500 font-sans mt-0.5" x-text="dptTitle(co.dpts[0])"></div>
+                      </div>
+                    </template>
+                    <template x-if="!co.dpts?.[0]"><span>—</span></template>
+                  </td>
                   <td class="px-4 py-3 font-mono text-xs" :title="flagTitle(co)" x-text="flagString(co)"></td>
-                  <td class="px-4 py-3 text-xs text-blue-600 underline decoration-dotted" x-text="(co.group_address_links ?? []).join(', ') || '—'"></td>
+                  <td class="px-4 py-3 text-xs">
+                    <template x-if="(co.group_address_links ?? []).length > 0">
+                      <div class="space-y-1.5">
+                        <template x-for="addr in co.group_address_links" :key="addr">
+                          <div>
+                            <div class="flex items-baseline gap-2">
+                              <span class="font-mono text-blue-600" x-text="addr"></span>
+                              <span class="text-gray-700" x-text="gaByAddress[addr]?.name ?? ''"></span>
+                            </div>
+                            <div x-show="gaByAddress[addr]?.description"
+                                 class="text-[11px] text-gray-500 mt-0.5 whitespace-pre-line"
+                                 x-text="gaByAddress[addr]?.description"></div>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="(co.group_address_links ?? []).length === 0"><span>—</span></template>
+                  </td>
                 </tr>
               </template>
             </tbody>
