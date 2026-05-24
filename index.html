@@ -1208,7 +1208,9 @@
                   <!-- Devices in line -->
                   <div x-show="expandedTopology.has('line_' + areaId + '_' + lineId)" class="border-t bg-gray-50">
                     <template x-for="devAddr in (line.devices ?? [])" :key="devAddr">
-                      <div class="flex items-center gap-3 px-12 py-2 text-sm border-b last:border-b-0 hover:bg-white">
+                      <div @click="deviceSearch = devAddr; activeTab = 'devices'"
+                           :title="`Zum Gerät ${devAddr} springen`"
+                           class="flex items-center gap-3 px-12 py-2 text-sm border-b last:border-b-0 hover:bg-white cursor-pointer">
                         <span class="font-mono text-xs text-gray-400 w-16" x-text="devAddr"></span>
                         <span class="text-gray-700" x-text="project?.devices?.[devAddr]?.name ?? devAddr"></span>
                         <span class="ml-auto text-xs text-gray-400" x-text="project?.devices?.[devAddr]?.manufacturer_name ?? ''"></span>
