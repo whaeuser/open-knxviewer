@@ -4,7 +4,7 @@
 
 > **Vibe Coded** — this project was built entirely with [Claude Code](https://claude.ai/code).
 >
-> **Demo:** [knxviewer.nurdaheim.net](https://knxviewer.nurdaheim.net/)
+> **Demo:** [knx.volt-logik.io](https://knx.volt-logik.io/)
 
 Web UI for uploading, analysing and documenting `.knxproj` files – with an optional live bus monitor for KNX/IP gateways.
 
