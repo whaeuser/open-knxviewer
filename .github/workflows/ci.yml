@@ -25,3 +25,27 @@ jobs:
         # .knxproj-Fixtures aus dem xknxproject-Schwesterrepo fehlen im CI —
         # die betroffenen Tests überspringen sich selbst per skipif.
         run: pytest -q
+
+  docker:
+    # Smoke-Test: fängt Image-Fehler ab, die Tests nicht sehen können
+    # (z.B. fehlende COPY-Dateien im Dockerfile).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build public image
+        run: docker build -f Dockerfile.public -t knxviewer-public:ci .
+      - name: Smoke test container
+        run: |
+          docker run -d --name smoke -p 8004:8004 knxviewer-public:ci
+          ok=0
+          for i in $(seq 1 15); do
+            if curl -fs localhost:8004/api/mode > /dev/null \
+               && curl -fs -o /dev/null localhost:8004/static/app.js; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          docker logs smoke
+          docker rm -f smoke
+          test "$ok" = "1"
