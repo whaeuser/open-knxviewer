@@ -1,6 +1,6 @@
 """Unit tests for _process_telegram — value formatting and state updates."""
-import pytest
 
+import core
 import server
 
 
@@ -215,12 +215,12 @@ async def test_device_name_lookup():
 
 
 async def test_ga_name_lookup():
-    server.state["project_data"] = {
+    core.set_project_data({
         "devices": {},
         "group_addresses": {
             "ga1": {"address": "1/2/3", "name": "Licht Küche"},
         },
-    }
+    })
     telegram = _Telegram(src="1.1.5", ga="1/2/3", decoded_data=_make_decoded(True, main=1, sub=1))
     await server._process_telegram(telegram)
     entry = list(server.state["telegram_buffer"])[0]

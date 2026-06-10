@@ -31,38 +31,36 @@ Run tests with:
 .venv/bin/python3 -m pytest -v       # verbose
 .venv/bin/python3 -m pytest tests/test_helpers.py   # one file
 ```
-Test files live in `tests/`. Dependencies: `pytest`, `pytest-asyncio`, `httpx` (installed in `.venv`).
+Test files live in `tests/`. Dev dependencies: `requirements-dev.txt` (pytest, pytest-asyncio, ruff). Lint with `.venv/bin/python3 -m ruff check .`. CI (GitHub Actions, `.github/workflows/ci.yml`) runs ruff + pytest on every push/PR; tests needing `.knxproj` fixtures skip themselves when the sibling `xknxproject` repo is missing.
 
 Test `.knxproj` files are available at `../xknxproject/test/resources/*.knxproj`.
 
 ## Architecture
 
-This is a minimal application — two server files sharing one `index.html` frontend SPA.
+Two server entry points sharing one `index.html` frontend SPA.
 
-### Backend
+### Backend module layout
 
-Two server files:
-- **`server.py`** — private server (port 8002): full features including KNX live connection, WebSocket, bus monitor, annotations
-- **`server_public.py`** — public server (port 8004): read-only, only `GET /`, `GET /api/mode`, `POST /api/parse`; no KNX connection, no WebSocket, no state
+- **`server.py`** — private server (port 8002): app, lifespan, KNX connection loop, telegram processing, WebSocket endpoints, gateway/annotations/log/parse routes. Includes the routers below.
+- **`server_public.py`** — public server (port 8004): read-only (`GET /`, `/api/mode`, `/api/demo*`, `POST /api/parse`, `POST /api/export/xlsx`); no KNX connection, no WebSocket, no state; slowapi rate limiting.
+- **`core.py`** — shared state dict, file-path constants, config load/save/update (thread-safe via RLock), recent-projects helpers, `set_project_data()` (builds `ga_dpt_map` + `ga_name_map`), `broadcast()`, `spawn()` (create_task with held reference), bus logger.
+- **`common.py`** — stateless helpers shared by both servers: `extract_security_data`, `parse_ets_certificate`, `build_project_xlsx`, `dpt_str`, `flag_str`.
+- **`models.py`** — Pydantic request models for all POST bodies.
+- **`routers/`** — APIRouter modules included by `server.py`: `ga_ops` (write/read/read-all), `scan` (GA-/PA-Scan, programming mode, device properties), `snapshots`, `recent_projects`, `llm` (KI-Analyse), `wireguard`.
 
-`server.py` uses a FastAPI lifespan context manager that starts the KNX connection task on startup.
+Conventions:
+- Routers access paths as `core.CONFIG_PATH` etc. (attribute access at call time) so tests can monkeypatch `core`.
+- Background tasks always via `core.spawn()` — never bare `asyncio.create_task()` (GC kann sonst laufende Tasks einsammeln).
+- Read-modify-write on `config.json` via `core.update_config({...})`, nie load→mutate→save.
+- `recent_projects._validate_slug()` rejects anything `project_slug()` wouldn't produce (path-traversal defence) — neue `{slug}`-Endpoints müssen es aufrufen.
+- `.knxproj`-Parsing läuft per `asyncio.to_thread` — nie synchron im Event-Loop.
 
-#### Global state (`state` dict)
-```python
-state = {
-    "xknx": None,              # active XKNX instance (or None)
-    "connected": False,         # current gateway connection status
-    "gateway_ip": "",
-    "gateway_port": 3671,
-    "language": "de-DE",        # language for .knxproj parsing (de-DE or en-US)
-    "project_data": None,       # last parsed project (for name lookups)
-    "ga_dpt_map": {},           # {ga_address: dpt_dict} from project — registered with xknx
-    "current_values": {},       # {ga_address: {"value": str, "ts": str}}
-    "telegram_buffer": deque(maxlen=500),  # ring buffer replayed to new WS clients
-    "ws_clients": set(),        # active WebSocket connections
-    "connect_task": None,       # asyncio Task running knx_connect_loop()
-}
-```
+#### Global state (`core.state` dict)
+Created by `core.initial_state()` (single source of truth — auch für den Test-Reset).
+Key fields: `xknx`, `connected`, `gateway_ip/port`, `language`, `project_data`,
+`ga_dpt_map` (registered with xknx), `ga_name_map` (O(1) GA-name lookup),
+`current_values`, `telegram_buffer` (deque maxlen=500), `ws_clients`, `connect_task`,
+`connection_type`, `remote_gateway_*`, `ga_scan_*`/`pa_scan_*`, `wireguard_*`.
 
 #### API routes
 | Method | Path | Description |
@@ -119,9 +117,9 @@ Rotates daily, keeps 30 days. Pre-loaded into `telegram_buffer` on startup (last
 
 ---
 
-### Frontend (`index.html`)
+### Frontend (`index.html` + `static/app.js`)
 
-Vanilla HTML with Alpine.js v3 (state management) and Tailwind CSS (styling), all loaded from CDN. No build step.
+Vanilla HTML with Alpine.js v3 (state management) and Tailwind CSS (styling). All JS lives in `static/app.js` (the `app()` Alpine component); `index.html` contains only markup. Libraries are vendored locally in `static/vendor/` (alpine.min.js, marked.min.js, vis-network.min.js) — no CDN, works offline. Tailwind is built locally (see memory: Build-Prozess Tailwind). No other build step.
 
 #### Startup (`init()`)
 Fetches `/api/mode` first. If `public: true`, sets `publicMode = true` and skips WebSocket, annotations, and last-project check. If `public: false` (default), connects WebSocket, loads annotations, and calls `loadLastProjectInfo()` to check for a previously parsed project.

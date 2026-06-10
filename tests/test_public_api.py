@@ -1,5 +1,4 @@
 """API tests for the public read-only server (server_public.py)."""
-from pathlib import Path
 
 import pytest
 import server_public
@@ -14,7 +13,10 @@ from tests.conftest import KNXPROJ_ETS6, KNXPROJ_NOPASS
 async def test_mode_returns_public(public_client):
     r = await public_client.get("/api/mode")
     assert r.status_code == 200
-    assert r.json() == {"public": True}
+    data = r.json()
+    assert data["public"] is True
+    assert data["default_theme"] in ("default", "voltlogik")
+    assert "branding" in data
 
 
 async def test_chrome_devtools_suppressed(public_client):

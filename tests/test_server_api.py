@@ -4,7 +4,7 @@ import json
 import pytest
 
 import server
-from tests.conftest import KNXPROJ_ETS6, KNXPROJ_NOPASS
+from tests.conftest import KNXPROJ_ETS6
 
 
 # ---------------------------------------------------------------------------
@@ -14,7 +14,10 @@ from tests.conftest import KNXPROJ_ETS6, KNXPROJ_NOPASS
 async def test_mode_returns_private(server_client):
     r = await server_client.get("/api/mode")
     assert r.status_code == 200
-    assert r.json() == {"public": False}
+    data = r.json()
+    assert data["public"] is False
+    assert data["default_theme"] in ("default", "voltlogik")
+    assert "branding" in data
 
 
 async def test_chrome_devtools_suppressed(server_client):

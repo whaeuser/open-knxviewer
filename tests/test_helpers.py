@@ -1,14 +1,14 @@
 """Unit tests for server.py helper functions (pure filesystem logic)."""
 import json
 
-import pytest
 
+import core
 import server
 
 
 class TestLoadConfig:
     def test_returns_defaults_when_no_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(server, "CONFIG_PATH", tmp_path / "config.json")
+        monkeypatch.setattr(core, "CONFIG_PATH", tmp_path / "config.json")
         result = server.load_config()
         assert result["gateway_ip"] == ""
         assert result["gateway_port"] == 3671
@@ -21,7 +21,7 @@ class TestLoadConfig:
         cfg_path.write_text(
             json.dumps({"gateway_ip": "192.168.1.1", "gateway_port": 3671, "language": "en-US"})
         )
-        monkeypatch.setattr(server, "CONFIG_PATH", cfg_path)
+        monkeypatch.setattr(core, "CONFIG_PATH", cfg_path)
         result = server.load_config()
         assert result["gateway_ip"] == "192.168.1.1"
         assert result["language"] == "en-US"
@@ -30,20 +30,20 @@ class TestLoadConfig:
         cfg_path = tmp_path / "config.json"
         cfg_path.write_text(json.dumps({"gateway_ip": "", "gateway_port": 3671,
                                         "language": "de-DE", "last_project_filename": "home.knxproj"}))
-        monkeypatch.setattr(server, "CONFIG_PATH", cfg_path)
+        monkeypatch.setattr(core, "CONFIG_PATH", cfg_path)
         assert server.load_config()["last_project_filename"] == "home.knxproj"
 
 
 class TestSaveConfig:
     def test_creates_file(self, tmp_path, monkeypatch):
         cfg_path = tmp_path / "config.json"
-        monkeypatch.setattr(server, "CONFIG_PATH", cfg_path)
+        monkeypatch.setattr(core, "CONFIG_PATH", cfg_path)
         server.save_config({"gateway_ip": "10.0.0.1", "gateway_port": 3671, "language": "de-DE"})
         assert cfg_path.exists()
 
     def test_roundtrip(self, tmp_path, monkeypatch):
         cfg_path = tmp_path / "config.json"
-        monkeypatch.setattr(server, "CONFIG_PATH", cfg_path)
+        monkeypatch.setattr(core, "CONFIG_PATH", cfg_path)
         token = "test-token-1234"
         data = {"gateway_ip": "10.0.0.1", "gateway_port": 3672, "language": "en-US",
                 "connection_type": "local", "remote_gateway_token": token}
@@ -57,7 +57,7 @@ class TestSaveConfig:
     def test_overwrites_existing(self, tmp_path, monkeypatch):
         cfg_path = tmp_path / "config.json"
         cfg_path.write_text(json.dumps({"gateway_ip": "old"}))
-        monkeypatch.setattr(server, "CONFIG_PATH", cfg_path)
+        monkeypatch.setattr(core, "CONFIG_PATH", cfg_path)
         server.save_config({"gateway_ip": "new", "gateway_port": 3671, "language": "de-DE"})
         assert json.loads(cfg_path.read_text())["gateway_ip"] == "new"
 
