@@ -33,7 +33,6 @@ import asyncio
 import json
 import logging
 import os
-import ssl
 import subprocess
 import sys
 from pathlib import Path
