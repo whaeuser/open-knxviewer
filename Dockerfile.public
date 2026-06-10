@@ -2,19 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Abhängigkeiten installieren
+# Abhängigkeiten installieren (gepinnt über requirements.txt)
 COPY requirements.txt .
-RUN pip install --no-cache-dir \
-    fastapi \
-    "uvicorn[standard]" \
-    python-multipart \
-    xknx \
-    xknxproject \
-    slowapi \
-    openpyxl
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Anwendung kopieren
-COPY server_public.py .
+COPY server_public.py common.py ./
 COPY index.html .
 COPY static/ ./static/
 
