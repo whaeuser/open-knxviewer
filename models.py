@@ -61,6 +61,8 @@ class WGEtsAccess(BaseModel):
 class LLMConfigUpdate(BaseModel):
     api_key: str | None = None
     model: str | None = None
+    local_url: str | None = None
+    local_token: str | None = None
 
 
 class LLMMessage(BaseModel):

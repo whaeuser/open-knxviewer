@@ -44,6 +44,35 @@ async def test_llm_local_model_counts_as_configured(server_client, patched_paths
     assert data["configured"] is True
 
 
+async def test_llm_local_url_and_token_roundtrip(server_client, patched_paths):
+    r = await server_client.post(
+        "/api/llm/config",
+        json={"local_url": "http://localhost:10240/v1", "local_token": "sk-local"},
+    )
+    assert r.status_code == 200
+    data = (await server_client.get("/api/llm/config")).json()
+    assert data["local_url"] == "http://localhost:10240/v1"
+    assert data["local_token_set"] is True
+    # Token persisted but never returned via the API
+    assert "sk-local" not in json.dumps(data)
+    cfg = json.loads((patched_paths / "config.json").read_text())
+    assert cfg["local_llm_url"] == "http://localhost:10240/v1"
+    assert cfg["local_llm_token"] == "sk-local"
+
+
+def test_resolve_local_target_uses_config(patched_paths):
+    import core
+    from routers.llm import _resolve_llm_target
+
+    core.update_config(
+        {"local_llm_url": "http://host:9999/v1/", "local_llm_token": "tok"}
+    )
+    url, headers, model = _resolve_llm_target("local-model", "")
+    assert url == "http://host:9999/v1/chat/completions"
+    assert headers["Authorization"] == "Bearer tok"
+    assert model == "local-model"
+
+
 async def test_llm_analyze_requires_config(server_client, patched_paths):
     r = await server_client.post("/api/llm/analyze", json={"question": "Was?"})
     assert r.status_code == 400

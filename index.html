@@ -590,12 +590,10 @@
                        @change="onProviderChange()" class="accent-blue-500">
                 <span>OpenRouter (Cloud)</span>
               </label>
-              <label class="inline-flex items-center gap-2 cursor-pointer"
-                     :class="{ 'opacity-50': !lmStudioAvailable }">
+              <label class="inline-flex items-center gap-2 cursor-pointer">
                 <input type="radio" value="local" x-model="llmProvider"
-                       @change="onProviderChange()" :disabled="!lmStudioAvailable"
-                       class="accent-blue-500">
-                <span>Lokal (LM Studio)
+                       @change="onProviderChange()" class="accent-blue-500">
+                <span>Lokal (OpenAI-kompatibel)
                   <span x-show="!lmStudioAvailable" class="text-xs text-gray-400">— nicht erreichbar</span>
                 </span>
               </label>
@@ -619,17 +617,43 @@
             </div>
           </template>
 
-          <!-- LM Studio: Dropdown mit Live-Liste -->
+          <!-- Lokales LLM (LM Studio / mlx-omni-server / …): URL, Token, Modell -->
           <template x-if="llmProvider === 'local'">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Modell</label>
-              <select x-model="llmModel"
-                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                <template x-for="m in lmStudioModels" :key="m">
-                  <option :value="m" x-text="m === 'local-model' ? 'local-model (aktuell geladen)' : m"></option>
-                </template>
-              </select>
-              <p class="text-xs text-gray-500 mt-1">Kein API-Key nötig. Verbindung zu <code>http://localhost:1234</code>.</p>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Server-URL (Basis)</label>
+                <input x-model="llmLocalUrl" type="text" placeholder="http://localhost:1234/v1"
+                       autocomplete="off" data-1p-ignore data-lpignore="true"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                <p class="text-xs text-gray-500 mt-1">OpenAI-kompatible Basis-URL, endet meist auf <code>/v1</code>. Endpunkte <code>/chat/completions</code> und <code>/models</code> werden angehängt.</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Token <span class="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input x-model="llmLocalToken" type="password"
+                       :placeholder="llmLocalTokenSet ? '•••••• (gespeichert — leer lassen zum Behalten)' : 'Bearer-Token, falls benötigt'"
+                       autocomplete="off" data-1p-ignore data-lpignore="true"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-sm font-medium text-gray-700">Modell</label>
+                  <button type="button" @click="testLocalLlm()"
+                          class="text-xs text-blue-600 hover:text-blue-700 hover:underline">
+                    Verbindung testen / Modelle laden
+                  </button>
+                </div>
+                <select x-model="llmModel"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <template x-for="m in lmStudioModels" :key="m">
+                    <option :value="m === 'local-model' ? 'local-model' : 'lm:' + m"
+                            x-text="m === 'local-model' ? 'local-model (aktuell geladen)' : m"></option>
+                  </template>
+                </select>
+                <p class="text-xs mt-1" :class="lmStudioAvailable ? 'text-green-600' : 'text-gray-400'"
+                   x-text="lmStudioAvailable ? '✓ Server erreichbar' : 'Server nicht erreichbar — URL/Token prüfen und „Verbindung testen“ klicken.'"></p>
+              </div>
             </div>
           </template>
 

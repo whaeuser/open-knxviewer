@@ -78,6 +78,9 @@ CONFIG_DEFAULTS = {
     "language": "de-DE",
     "connection_type": "local",
     "remote_gateway_token": "",
+    # Lokales LLM (LM Studio / mlx-omni-server / o.ä., OpenAI-kompatibel)
+    "local_llm_url": "http://localhost:1234/v1",
+    "local_llm_token": "",
     # WireGuard defaults
     "wireguard_enabled": False,
     "wireguard_interface": "wg0",

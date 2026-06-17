@@ -97,6 +97,9 @@ function app() {
     llmProvider: 'openrouter',  // 'openrouter' | 'local'
     lmStudioAvailable: false,
     lmStudioModels: ['local-model'],
+    llmLocalUrl: 'http://localhost:1234/v1',
+    llmLocalToken: '',
+    llmLocalTokenSet: false,
     llmQuestion: '',
     llmResponse: '',
     llmReasoning: '',
@@ -734,6 +737,8 @@ function app() {
           const cfg = await res.json();
           this.llmConfigured = cfg.configured;
           this.llmModel = cfg.model;
+          if (cfg.local_url) this.llmLocalUrl = cfg.local_url;
+          this.llmLocalTokenSet = !!cfg.local_token_set;
           const isLocal = cfg.model === 'local-model' || cfg.model.startsWith('lm:');
           this.llmProvider = isLocal ? 'local' : 'openrouter';
         }
@@ -756,8 +761,11 @@ function app() {
 
     onProviderChange() {
       if (this.llmProvider === 'local') {
-        if (!this.llmModel || (this.llmModel !== 'local-model' && !this.llmModel.startsWith('lm:') && !this.lmStudioModels.includes(this.llmModel))) {
-          this.llmModel = 'local-model';
+        const isLocalVal = this.llmModel === 'local-model' || this.llmModel.startsWith('lm:');
+        if (!isLocalVal) {
+          // Erstes echtes Modell vorwählen; 'local-model' als Fallback
+          const real = this.lmStudioModels.find((m) => m !== 'local-model');
+          this.llmModel = real ? 'lm:' + real : 'local-model';
         }
       } else if (this.llmModel === 'local-model' || this.llmModel.startsWith('lm:')) {
         this.llmModel = 'z-ai/glm-5';
@@ -770,6 +778,10 @@ function app() {
         if (this.llmProvider === 'openrouter' && this.llmApiKey) {
           body.api_key = this.llmApiKey;
         }
+        if (this.llmProvider === 'local') {
+          body.local_url = this.llmLocalUrl;
+          if (this.llmLocalToken) body.local_token = this.llmLocalToken;
+        }
         const res = await fetch('/api/llm/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -779,11 +791,29 @@ function app() {
           const isLocal = this.llmProvider === 'local';
           this.llmConfigured = !!this.llmApiKey || isLocal;
           this.llmApiKey = '';
+          if (this.llmLocalToken) this.llmLocalTokenSet = true;
+          this.llmLocalToken = '';
           this.showGatewayConfig = false;
         }
       } catch (e) {
         alert('Fehler beim Speichern: ' + e.message);
       }
+    },
+
+    // Lokale URL/Token speichern und Modell-Liste neu laden (Verbindung testen)
+    async testLocalLlm() {
+      try {
+        const body = { local_url: this.llmLocalUrl };
+        if (this.llmLocalToken) body.local_token = this.llmLocalToken;
+        await fetch('/api/llm/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (this.llmLocalToken) this.llmLocalTokenSet = true;
+        this.llmLocalToken = '';
+      } catch (_) {}
+      await this.loadLmStudioModels();
     },
 
     setLlmQuestion(question) {

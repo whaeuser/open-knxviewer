@@ -1,4 +1,4 @@
-"""KI-Analyse: OpenRouter / LM Studio streaming endpoints."""
+"""KI-Analyse: OpenRouter / lokales LLM (LM Studio, mlx-omni-server) streaming endpoints."""
 import asyncio
 import json
 
@@ -14,18 +14,37 @@ router = APIRouter(prefix="/api/llm", tags=["llm"])
 
 LLM_DEFAULT_MODEL = "z-ai/glm-5"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
+LOCAL_LLM_DEFAULT_URL = "http://localhost:1234/v1"
 
 
 def _is_local_model(model: str) -> bool:
     return model == "local-model" or model.startswith("lm:")
 
 
+def _local_llm_base() -> str:
+    """Base URL of the local OpenAI-compatible server, without trailing slash."""
+    url = (load_config().get("local_llm_url") or LOCAL_LLM_DEFAULT_URL).strip()
+    return url.rstrip("/")
+
+
+def _local_llm_headers() -> dict:
+    """Headers for the local LLM; adds Bearer token if one is configured."""
+    headers = {"Content-Type": "application/json"}
+    token = (load_config().get("local_llm_token") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def _resolve_llm_target(model: str, api_key: str) -> tuple[str, dict, str]:
     """Return (url, headers, actual_model) for the configured model."""
     if _is_local_model(model):
         actual = model[3:] if model.startswith("lm:") else model
-        return LM_STUDIO_URL, {"Content-Type": "application/json"}, actual
+        return (
+            f"{_local_llm_base()}/chat/completions",
+            _local_llm_headers(),
+            actual,
+        )
     return (
         OPENROUTER_URL,
         {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -116,10 +135,13 @@ def _stream_llm(url: str, headers: dict, payload: dict):
 
 @router.get("/lmstudio/models")
 async def lmstudio_models():
-    """Return models loaded in LM Studio. 'local-model' is always first."""
+    """Return models loaded in the local LLM server. 'local-model' is always first."""
+    base = _local_llm_base()
+    headers = _local_llm_headers()
+
     def _fetch():
         try:
-            resp = httpx.get("http://localhost:1234/v1/models", timeout=3)
+            resp = httpx.get(f"{base}/models", headers=headers, timeout=3)
             ids = [m["id"] for m in resp.json().get("data", [])
                    if "embedding" not in m["id"].lower()]
             return {"available": True, "models": ["local-model"] + ids}
@@ -136,6 +158,8 @@ def get_llm_config():
     return {
         "configured": bool(key) or _is_local_model(model),
         "model": model,
+        "local_url": cfg.get("local_llm_url", LOCAL_LLM_DEFAULT_URL),
+        "local_token_set": bool(cfg.get("local_llm_token", "")),
     }
 
 
@@ -146,6 +170,10 @@ async def set_llm_config(data: LLMConfigUpdate):
         updates["openrouter_api_key"] = data.api_key
     if data.model is not None:
         updates["llm_model"] = data.model or LLM_DEFAULT_MODEL
+    if data.local_url is not None:
+        updates["local_llm_url"] = data.local_url.strip() or LOCAL_LLM_DEFAULT_URL
+    if data.local_token is not None:
+        updates["local_llm_token"] = data.local_token.strip()
     core.update_config(updates)
     return {"ok": True}
 
